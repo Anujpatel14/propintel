@@ -15,6 +15,7 @@ import {
 import { lookupProperty } from '@/lib/services/properties';
 import { analyzeDeal } from '@/lib/services/ai';
 import { exportToPDF } from '@/lib/services/reports';
+import { savePropertyAnalysis, saveFlipAnalysis } from '@/app/actions/analysisActions';
 import SpotlightCard from '@/components/ui/SpotlightCard';
 
 type ModelType = 'hold' | 'flip' | 'rental';
@@ -45,6 +46,26 @@ export default function PropertyAnalyzerPage() {
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [searchSuccessMsg, setSearchSuccessMsg] = useState('');
+
+  // Load user underwriting defaults when available
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const { getUnderwritingSettings } = await import('@/app/actions/settingsActions');
+        const result = await getUnderwritingSettings();
+        if (result.success && result.settings) {
+          const s = result.settings;
+          setDownPaymentPercent(s.defaultDownPayment);
+          setMortgageRate(s.defaultMortgageRate);
+          setMortgageTerm(s.defaultMortgageTerm);
+          setVacancyRate(s.defaultVacancyRate);
+          setMaintenanceRate(s.defaultMaintenanceRate);
+        }
+      } catch {
+        /* defaults stay as-is */
+      }
+    })();
+  }, []);
 
   const handlePropertyLookup = async () => {
     setIsSearching(true);
@@ -178,23 +199,52 @@ export default function PropertyAnalyzerPage() {
     exportToPDF(reportData);
   };
 
-  const handleSaveDeal = () => {
+  const parseAddressParts = () => {
+    const parts = address.split(',').map((s) => s.trim());
+    const city = parts[1] || 'Unknown';
+    const statePart = parts[2] || 'TX';
+    const state = statePart.substring(0, 2).toUpperCase();
+    return { city, state };
+  };
+
+  const handleSaveDeal = async () => {
     setIsSaving(true);
     try {
-      const deals = JSON.parse(localStorage.getItem('propintel_saved_deals') || '[]');
-      deals.unshift({
-        id: `deal_${Date.now()}`,
-        address,
-        type: modelType,
-        purchasePrice,
-        cashFlow: Math.round(cashFlow),
-        roi: Number((modelType === 'flip' ? flipRoi : cashOnCash).toFixed(1)),
-        capRate: Number(capRate.toFixed(1)),
-        savedAt: new Date().toISOString(),
-      });
-      localStorage.setItem('propintel_saved_deals', JSON.stringify(deals.slice(0, 50)));
+      if (modelType === 'flip') {
+        await saveFlipAnalysis({
+          address,
+          purchasePrice,
+          rehabCost,
+          arv,
+          financingCost: flipFinancing,
+          holdingCost: flipHolding,
+          sellingCost: flipSelling,
+        });
+      } else {
+        const { city, state } = parseAddressParts();
+        await savePropertyAnalysis({
+          address,
+          city,
+          state,
+          zip,
+          purchasePrice,
+          rehabCost,
+          arv,
+          rent,
+          downPayment: downPaymentPercent,
+          taxes: taxes * 12,
+          insurance: insurance * 12,
+          hoa,
+          vacancyRate,
+          maintenanceRate,
+          mortgageRate,
+          mortgageTerm,
+        });
+      }
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (e) {
+      console.error(e);
     } finally {
       setIsSaving(false);
     }

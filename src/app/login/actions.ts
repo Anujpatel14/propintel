@@ -4,9 +4,12 @@ import { signInMockUser, signOutMockUser } from '@/lib/services/auth';
 import { redirect } from 'next/navigation';
 
 export async function loginUserAction(email: string) {
-  const session = await signInMockUser(email);
+  const normalized = email.trim().toLowerCase();
+  const session = await signInMockUser(normalized);
   if (!session) {
-    throw new Error('Invalid email or credentials. Use a sandbox profile below.');
+    throw new Error(
+      'Use a sandbox profile: investor@propintel.com or admin@propintel.com (custom emails need Clerk).'
+    );
   }
 
   if (session.role === 'ADMIN') {
@@ -18,5 +21,5 @@ export async function loginUserAction(email: string) {
 
 export async function logoutUserAction() {
   await signOutMockUser();
-  redirect('/');
+  redirect('/login');
 }

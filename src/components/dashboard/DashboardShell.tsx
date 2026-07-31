@@ -17,6 +17,8 @@ import {
   Menu,
   X,
   ShieldCheck,
+  Settings,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -24,8 +26,10 @@ const NAV_ITEMS = [
   { label: 'Analyzer', href: '/dashboard/analyzer', icon: TrendingUp },
   { label: 'CRM Pipeline', href: '/dashboard/crm', icon: Layers },
   { label: 'Saved Deals', href: '/dashboard/deals', icon: FolderOpen },
+  { label: 'Compare', href: '/dashboard/compare', icon: ArrowRightLeft },
   { label: 'Coaching', href: '/dashboard/coaching', icon: Calendar },
   { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
+  { label: 'Settings', href: '/dashboard/settings/profile', icon: Settings },
 ];
 
 interface DashboardShellProps {
@@ -44,8 +48,11 @@ export default function DashboardShell({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const isActive = (href: string) =>
-    href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(href);
+  const isActive = (href: string) => {
+    if (href === '/dashboard') return pathname === '/dashboard';
+    if (href.startsWith('/dashboard/settings')) return pathname.startsWith('/dashboard/settings');
+    return pathname.startsWith(href);
+  };
 
   const NavLinks = ({ onNavigate }: { onNavigate?: () => void }) => (
     <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5">

@@ -1,23 +1,21 @@
 'use client';
 
-import React, { useState } from 'react';
-import { 
-  FolderOpen, 
-  Search, 
-  Trash2, 
-  TrendingUp, 
-  DollarSign, 
-  ArrowRightLeft, 
-  Building,
-  CheckCircle,
-  X
+import React, { useEffect, useState, useTransition } from 'react';
+import {
+  Search,
+  Trash2,
+  ArrowRightLeft,
+  X,
+  Loader2,
 } from 'lucide-react';
 import SpotlightCard from '@/components/ui/SpotlightCard';
+import { getUserAnalyses, deleteAnalysis } from '@/app/actions/analysisActions';
 
 interface SavedDeal {
   id: string;
   address: string;
   type: string;
+  analysisType: 'PROPERTY' | 'FLIP';
   purchasePrice: number;
   rehabCost: number;
   cashFlow: number;
@@ -26,318 +24,328 @@ interface SavedDeal {
   dscr: number;
 }
 
-const DEFAULT_DEALS: SavedDeal[] = [
-  {
-    id: 'deal-1',
-    address: '1402 Oak Ridge Dr, Dallas, TX',
-    type: 'Buy & Hold',
-    purchasePrice: 220000,
-    rehabCost: 30000,
-    cashFlow: 312.45,
-    roi: 11.2,
-    capRate: 7.2,
-    dscr: 1.35,
-  },
-  {
-    id: 'deal-2',
-    address: '892 Elm Street, Plano, TX',
-    type: 'Fix & Flip',
-    purchasePrice: 195000,
-    rehabCost: 45000,
-    cashFlow: 0,
-    roi: 18.5, // flip yield
-    capRate: 0,
-    dscr: 0,
-  },
-  {
-    id: 'deal-3',
-    address: '778 Highland Ave, Austin, TX',
-    type: 'Buy & Hold',
-    purchasePrice: 380000,
-    rehabCost: 15000,
-    cashFlow: 184.20,
-    roi: 6.8,
-    capRate: 5.8,
-    dscr: 1.15,
-  },
-  {
-    id: 'deal-4',
-    address: '311 Maple St, Fort Worth, TX',
-    type: 'Buy & Hold',
-    purchasePrice: 165000,
-    rehabCost: 25000,
-    cashFlow: 298.50,
-    roi: 12.4,
-    capRate: 8.1,
-    dscr: 1.48,
-  },
-];
-
 export default function SavedDealsPage() {
-  const [deals, setDeals] = useState<SavedDeal[]>(DEFAULT_DEALS);
+  const [deals, setDeals] = useState<SavedDeal[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showComparison, setShowComparison] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
-  React.useEffect(() => {
+  const loadDeals = async () => {
     try {
-      const stored = JSON.parse(localStorage.getItem('propintel_saved_deals') || '[]') as Array<{
-        id: string;
-        address: string;
-        type: string;
-        purchasePrice: number;
-        cashFlow: number;
-        roi: number;
-        capRate: number;
-      }>;
-      if (stored.length) {
-        const mapped: SavedDeal[] = stored.map((d) => ({
-          id: d.id,
-          address: d.address,
-          type:
-            d.type === 'flip'
-              ? 'Fix & Flip'
-              : d.type === 'rental'
-                ? 'Rental L/T'
-                : d.type === 'hold'
-                  ? 'Buy & Hold'
-                  : d.type,
-          purchasePrice: d.purchasePrice,
-          rehabCost: 0,
-          cashFlow: d.cashFlow,
-          roi: d.roi,
-          capRate: d.capRate,
-          dscr: 0,
-        }));
-        setDeals((prev) => {
-          const ids = new Set(mapped.map((m) => m.id));
-          return [...mapped, ...prev.filter((p) => !ids.has(p.id))];
-        });
-      }
-    } catch {
-      /* ignore */
+      const { propertyAnalyses, flipAnalyses } = await getUserAnalyses();
+
+      const propertyDeals: SavedDeal[] = propertyAnalyses.map((a) => ({
+        id: a.id,
+        address: [a.address, a.city, a.state].filter(Boolean).join(', '),
+        type: 'Buy & Hold',
+        analysisType: 'PROPERTY' as const,
+        purchasePrice: a.purchasePrice,
+        rehabCost: a.rehabCost,
+        cashFlow: a.cashFlow ?? 0,
+        roi: a.cashOnCash ?? a.roi ?? 0,
+        capRate: a.capRate ?? 0,
+        dscr: a.dscr ?? 0,
+      }));
+
+      const flipDeals: SavedDeal[] = flipAnalyses.map((a) => ({
+        id: a.id,
+        address: a.address,
+        type: 'Fix & Flip',
+        analysisType: 'FLIP' as const,
+        purchasePrice: a.purchasePrice,
+        rehabCost: a.rehabCost,
+        cashFlow: 0,
+        roi: a.roi ?? 0,
+        capRate: 0,
+        dscr: 0,
+      }));
+
+      const combined = [...propertyDeals, ...flipDeals].sort((a, b) =>
+        a.address.localeCompare(b.address)
+      );
+      setDeals(combined);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
+    loadDeals();
   }, []);
 
-  // Toggle selection for comparison
   const handleSelectDeal = (id: string) => {
-    setSelectedIds(prev => 
-      prev.includes(id) 
-        ? prev.filter(item => item !== id) 
-        : prev.length < 3 
-          ? [...prev, id] 
+    setSelectedIds((prev) =>
+      prev.includes(id)
+        ? prev.filter((item) => item !== id)
+        : prev.length < 3
+          ? [...prev, id]
           : prev
     );
   };
 
-  // Remove deal
   const handleDeleteDeal = (id: string) => {
-    setDeals(prev => prev.filter(d => d.id !== id));
-    setSelectedIds(prev => prev.filter(item => item !== id));
+    const deal = deals.find((d) => d.id === id);
+    if (!deal) return;
+
+    setDeals((prev) => prev.filter((d) => d.id !== id));
+    setSelectedIds((prev) => prev.filter((item) => item !== id));
+
+    startTransition(async () => {
+      try {
+        await deleteAnalysis(id, deal.analysisType);
+      } catch (e) {
+        console.error(e);
+        await loadDeals();
+      }
+    });
   };
 
-  // Filter deals
-  const filteredDeals = deals.filter(d => 
+  const filteredDeals = deals.filter((d) =>
     d.address.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const selectedDeals = deals.filter(d => selectedIds.includes(d.id));
+  const selectedDeals = deals.filter((d) => selectedIds.includes(d.id));
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto">
-      
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[var(--border)] pb-6">
+    <div className="mx-auto max-w-7xl space-y-8">
+      <div className="flex flex-col items-start justify-between gap-4 border-b border-[var(--border)] pb-6 md:flex-row md:items-center">
         <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-foreground">Saved Deals Database</h1>
-          <p className="text-sm text-[var(--muted)]">Search historical calculations, compare yields, and manage archives.</p>
+          <h1 className="text-2xl font-extrabold text-foreground md:text-3xl">
+            Saved Deals Database
+          </h1>
+          <p className="text-sm text-[var(--muted)]">
+            Search historical calculations, compare yields, and manage archives.
+          </p>
         </div>
         {selectedIds.length >= 2 && (
           <button
             onClick={() => setShowComparison(true)}
-            className="bg-[#0e1a16] hover:bg-teal-900 text-foreground font-bold px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 shadow-lg  text-sm cursor-pointer"
+            className="flex cursor-pointer items-center gap-2 rounded-xl bg-[#0e1a16] px-4 py-2.5 text-sm font-bold text-foreground shadow-lg transition-all hover:bg-teal-900"
           >
-            <ArrowRightLeft className="w-4 h-4" /> Compare Selected ({selectedIds.length})
+            <ArrowRightLeft className="h-4 w-4" /> Compare Selected ({selectedIds.length})
           </button>
         )}
       </div>
 
-      {/* Search Filter */}
       <div className="relative max-w-md">
-        <Search className="w-4 h-4 text-[var(--muted-foreground)] absolute left-3 top-3" />
+        <Search className="absolute top-3 left-3 h-4 w-4 text-[var(--muted-foreground)]" />
         <input
           type="text"
           placeholder="Search by street address..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full glass-input pl-10 pr-4 py-2.5 text-sm"
+          className="glass-input w-full py-2.5 pr-4 pl-10 text-sm"
         />
       </div>
 
-      {/* Grid of Deals */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredDeals.map((deal) => {
-          const isChecked = selectedIds.includes(deal.id);
-          
-          return (
-            <SpotlightCard 
-              key={deal.id}
-              className={`p-6 space-y-4 border ${isChecked ? 'border-teal-700/30 bg-teal-700/5' : 'border-[var(--border)] bg-white'}`}
-            >
-              
-              {/* Card Header */}
-              <div className="flex justify-between items-start gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="bg-[var(--surface-soft)] text-[9px] text-[var(--muted)] font-bold px-2 py-0.5 rounded uppercase">
-                      {deal.type}
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => handleSelectDeal(deal.id)}
-                      className="w-3.5 h-3.5 accent-emerald-500 rounded border-[var(--border)]"
-                    />
-                    <span className="text-[10px] text-[var(--muted-foreground)]">Compare</span>
-                  </div>
-                  <h3 className="text-sm font-bold text-foreground leading-snug mt-1">{deal.address}</h3>
-                </div>
-                <button
-                  onClick={() => handleDeleteDeal(deal.id)}
-                  className="p-1.5 bg-[var(--surface-soft)] hover:bg-red-500/10 rounded-lg text-[var(--muted-foreground)] hover:text-red-400 transition-all cursor-pointer"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20 text-[var(--muted)]">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading saved deals…
+        </div>
+      ) : filteredDeals.length === 0 ? (
+        <div className="rounded-xl border border-[var(--border)] bg-white py-16 text-center text-sm text-[var(--muted)]">
+          No saved analyses yet. Underwrite a deal in the Property Analyzer and hit Save.
+        </div>
+      ) : (
+        <div className={`grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 ${isPending ? 'opacity-80' : ''}`}>
+          {filteredDeals.map((deal) => {
+            const isChecked = selectedIds.includes(deal.id);
 
-              {/* Data metrics */}
-              <div className="grid grid-cols-3 gap-2 border-t border-[var(--border)] pt-4 text-center">
-                <div>
-                  <span className="text-[9px] text-[var(--muted-foreground)] uppercase font-semibold">Purchase</span>
-                  <div className="text-xs font-bold text-foreground mt-0.5">${(deal.purchasePrice / 1000).toFixed(0)}k</div>
-                </div>
-                <div>
-                  <span className="text-[9px] text-[var(--muted-foreground)] uppercase font-semibold">Rehab</span>
-                  <div className="text-xs font-bold text-foreground mt-0.5">${(deal.rehabCost / 1000).toFixed(0)}k</div>
-                </div>
-                <div>
-                  <span className="text-[9px] text-[var(--muted-foreground)] uppercase font-semibold">ROI</span>
-                  <div className="text-xs font-extrabold text-teal-800 mt-0.5">{deal.roi.toFixed(1)}%</div>
-                </div>
-              </div>
-
-              {deal.type === 'Buy & Hold' && (
-                <div className="grid grid-cols-2 gap-4 text-[10px] border-t border-[var(--border)] pt-3">
-                  <div className="flex justify-between">
-                    <span className="text-[var(--muted-foreground)]">Cash Flow:</span>
-                    <span className="font-bold text-[var(--muted)]">${deal.cashFlow.toFixed(0)}/mo</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[var(--muted-foreground)]">DSCR:</span>
-                    <span className="font-bold text-[var(--muted)]">{deal.dscr.toFixed(2)}</span>
-                  </div>
-                </div>
-              )}
-
-            </SpotlightCard>
-          );
-        })}
-      </div>
-
-      {/* Slide-out Comparison Overlay Drawer */}
-      {showComparison && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-sm z-50 flex items-center justify-center p-6">
-          <div className="glass-panel border border-[var(--border)] rounded-2xl p-8 max-w-4xl w-full relative space-y-6">
-            
-            <div className="flex justify-between items-center border-b border-[var(--border)] pb-4">
-              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <ArrowRightLeft className="w-5 h-5 text-teal-800" /> Side-by-Side Comparison Matrix
-              </h3>
-              <button 
-                onClick={() => setShowComparison(false)}
-                className="p-1.5 bg-[var(--surface-soft)] hover:bg-white rounded-lg text-[var(--muted)] hover:text-foreground transition-all cursor-pointer"
+            return (
+              <SpotlightCard
+                key={deal.id}
+                className={`space-y-4 border p-6 ${isChecked ? 'border-teal-700/30 bg-teal-700/5' : 'border-[var(--border)] bg-white'}`}
               >
-                <X className="w-4 h-4" />
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded bg-[var(--surface-soft)] px-2 py-0.5 text-[9px] font-bold text-[var(--muted)] uppercase">
+                        {deal.type}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleSelectDeal(deal.id)}
+                        className="h-3.5 w-3.5 rounded border-[var(--border)] accent-emerald-500"
+                      />
+                      <span className="text-[10px] text-[var(--muted-foreground)]">Compare</span>
+                    </div>
+                    <h3 className="mt-1 text-sm leading-snug font-bold text-foreground">
+                      {deal.address}
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteDeal(deal.id)}
+                    className="cursor-pointer rounded-lg bg-[var(--surface-soft)] p-1.5 text-[var(--muted-foreground)] transition-all hover:bg-red-500/10 hover:text-red-400"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 border-t border-[var(--border)] pt-4 text-center">
+                  <div>
+                    <span className="text-[9px] font-semibold text-[var(--muted-foreground)] uppercase">
+                      Purchase
+                    </span>
+                    <div className="mt-0.5 text-xs font-bold text-foreground">
+                      ${(deal.purchasePrice / 1000).toFixed(0)}k
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-semibold text-[var(--muted-foreground)] uppercase">
+                      Rehab
+                    </span>
+                    <div className="mt-0.5 text-xs font-bold text-foreground">
+                      ${(deal.rehabCost / 1000).toFixed(0)}k
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-semibold text-[var(--muted-foreground)] uppercase">
+                      ROI
+                    </span>
+                    <div className="mt-0.5 text-xs font-extrabold text-teal-800">
+                      {deal.roi.toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+
+                {deal.type === 'Buy & Hold' && (
+                  <div className="grid grid-cols-2 gap-4 border-t border-[var(--border)] pt-3 text-[10px]">
+                    <div className="flex justify-between">
+                      <span className="text-[var(--muted-foreground)]">Cash Flow:</span>
+                      <span className="font-bold text-[var(--muted)]">
+                        ${deal.cashFlow.toFixed(0)}/mo
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--muted-foreground)]">DSCR:</span>
+                      <span className="font-bold text-[var(--muted)]">{deal.dscr.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+              </SpotlightCard>
+            );
+          })}
+        </div>
+      )}
+
+      {showComparison && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-6 backdrop-blur-sm">
+          <div className="glass-panel relative w-full max-w-4xl space-y-6 rounded-2xl border border-[var(--border)] p-8">
+            <div className="flex items-center justify-between border-b border-[var(--border)] pb-4">
+              <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
+                <ArrowRightLeft className="h-5 w-5 text-teal-800" /> Side-by-Side Comparison Matrix
+              </h3>
+              <button
+                onClick={() => setShowComparison(false)}
+                className="cursor-pointer rounded-lg bg-[var(--surface-soft)] p-1.5 text-[var(--muted)] transition-all hover:bg-white hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Matrix Table */}
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left border-collapse">
+              <table className="w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)]">
-                    <th className="py-3 text-xs text-[var(--muted-foreground)] uppercase font-semibold">Financial Parameter</th>
-                    {selectedDeals.map((d, i) => (
-                      <th key={i} className="py-3 px-4 font-bold text-foreground">{d.address.split(',')[0]}</th>
+                    <th className="py-3 text-xs font-semibold text-[var(--muted-foreground)] uppercase">
+                      Financial Parameter
+                    </th>
+                    {selectedDeals.map((d) => (
+                      <th key={d.id} className="px-4 py-3 font-bold text-foreground">
+                        {d.address.split(',')[0]}
+                      </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   <tr>
-                    <td className="py-3 text-[var(--muted)] text-xs uppercase font-medium">Calculation Model</td>
-                    {selectedDeals.map((d, i) => (
-                      <td key={i} className="py-3 px-4 font-semibold text-[var(--muted)]">{d.type}</td>
+                    <td className="py-3 text-xs font-medium text-[var(--muted)] uppercase">
+                      Calculation Model
+                    </td>
+                    {selectedDeals.map((d) => (
+                      <td key={d.id} className="px-4 py-3 font-semibold text-[var(--muted)]">
+                        {d.type}
+                      </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="py-3 text-[var(--muted)] text-xs uppercase font-medium">Purchase Price</td>
-                    {selectedDeals.map((d, i) => (
-                      <td key={i} className="py-3 px-4 font-bold text-foreground">${d.purchasePrice.toLocaleString()}</td>
+                    <td className="py-3 text-xs font-medium text-[var(--muted)] uppercase">
+                      Purchase Price
+                    </td>
+                    {selectedDeals.map((d) => (
+                      <td key={d.id} className="px-4 py-3 font-bold text-foreground">
+                        ${d.purchasePrice.toLocaleString()}
+                      </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="py-3 text-[var(--muted)] text-xs uppercase font-medium">Rehab Budget</td>
-                    {selectedDeals.map((d, i) => (
-                      <td key={i} className="py-3 px-4 font-bold text-foreground">${d.rehabCost.toLocaleString()}</td>
+                    <td className="py-3 text-xs font-medium text-[var(--muted)] uppercase">
+                      Rehab Budget
+                    </td>
+                    {selectedDeals.map((d) => (
+                      <td key={d.id} className="px-4 py-3 font-bold text-foreground">
+                        ${d.rehabCost.toLocaleString()}
+                      </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="py-3 text-[var(--muted)] text-xs uppercase font-medium">Total Capital Outlay</td>
-                    {selectedDeals.map((d, i) => (
-                      <td key={i} className="py-3 px-4 font-bold text-teal-800">${(d.purchasePrice * 0.2 + d.rehabCost).toLocaleString()}</td>
+                    <td className="py-3 text-xs font-medium text-[var(--muted)] uppercase">
+                      Net Return (ROI)
+                    </td>
+                    {selectedDeals.map((d) => (
+                      <td key={d.id} className="px-4 py-3 font-extrabold text-teal-800">
+                        {d.roi.toFixed(1)}%
+                      </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="py-3 text-[var(--muted)] text-xs uppercase font-medium">Net Return (ROI)</td>
-                    {selectedDeals.map((d, i) => (
-                      <td key={i} className="py-3 px-4 font-extrabold text-teal-800">{d.roi.toFixed(1)}%</td>
+                    <td className="py-3 text-xs font-medium text-[var(--muted)] uppercase">
+                      Monthly Cash Flow
+                    </td>
+                    {selectedDeals.map((d) => (
+                      <td key={d.id} className="px-4 py-3 font-semibold text-[var(--muted)]">
+                        {d.cashFlow > 0 ? `$${d.cashFlow.toFixed(2)}/mo` : 'N/A'}
+                      </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="py-3 text-[var(--muted)] text-xs uppercase font-medium">Monthly Cash Flow</td>
-                    {selectedDeals.map((d, i) => (
-                      <td key={i} className="py-3 px-4 font-semibold text-[var(--muted)]">${d.cashFlow > 0 ? `${d.cashFlow.toFixed(2)}/mo` : 'N/A'}</td>
+                    <td className="py-3 text-xs font-medium text-[var(--muted)] uppercase">
+                      Cap Rate
+                    </td>
+                    {selectedDeals.map((d) => (
+                      <td key={d.id} className="px-4 py-3 font-semibold text-[var(--muted)]">
+                        {d.capRate > 0 ? `${d.capRate.toFixed(2)}%` : 'N/A'}
+                      </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="py-3 text-[var(--muted)] text-xs uppercase font-medium">Cap Rate</td>
-                    {selectedDeals.map((d, i) => (
-                      <td key={i} className="py-3 px-4 font-semibold text-[var(--muted)]">{d.capRate > 0 ? `${d.capRate.toFixed(2)}%` : 'N/A'}</td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="py-3 text-[var(--muted)] text-xs uppercase font-medium">DSCR</td>
-                    {selectedDeals.map((d, i) => (
-                      <td key={i} className="py-3 px-4 font-semibold text-[var(--muted)]">{d.dscr > 0 ? d.dscr.toFixed(2) : 'N/A'}</td>
+                    <td className="py-3 text-xs font-medium text-[var(--muted)] uppercase">DSCR</td>
+                    {selectedDeals.map((d) => (
+                      <td key={d.id} className="px-4 py-3 font-semibold text-[var(--muted)]">
+                        {d.dscr > 0 ? d.dscr.toFixed(2) : 'N/A'}
+                      </td>
                     ))}
                   </tr>
                 </tbody>
               </table>
             </div>
 
-            <div className="flex justify-end pt-4 border-t border-[var(--border)]">
+            <div className="flex justify-end border-t border-[var(--border)] pt-4">
               <button
                 onClick={() => setShowComparison(false)}
-                className="bg-teal-700 hover:bg-teal-600 text-white font-bold px-6 py-2.5 rounded-xl transition-all text-xs cursor-pointer"
+                className="cursor-pointer rounded-xl bg-teal-700 px-6 py-2.5 text-xs font-bold text-white transition-all hover:bg-teal-600"
               >
                 Close Comparison
               </button>
             </div>
-
           </div>
         </div>
       )}
-
     </div>
   );
 }

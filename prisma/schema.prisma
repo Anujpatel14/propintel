@@ -1,6 +1,7 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -18,99 +19,150 @@ model User {
   name              String?
   email             String             @unique
   role              Role               @default(INVESTOR)
+  status            String             @default("ACTIVE") // ACTIVE, SUSPENDED
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   profile           Profile?
   subscription      Subscription?
+  settings          UserSettings?
   propertyAnalyses  PropertyAnalysis[]
   flipAnalyses      FlipAnalysis[]
   rentalAnalyses    RentalAnalysis[]
   deals             DealPipeline[]
   coachings         Coaching[]
   activities        ActivityLog[]
+  orders            Order[]
 }
 
 model Profile {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  phone        String?
-  company      String?
-  investorType String?  // e.g., "Wholesaler", "Fix & Flip", "Buy & Hold"
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone          String?
+  company        String?
+  investorType   String? // e.g., "Wholesaler", "Fix & Flip", "Buy & Hold"
+  officeAddress  String?
+  targetMarkets  String? // comma-separated cities/ZIPs
+  minCashFlow    Float?
+  targetRoi      Float?
+  targetCapRate  Float?
+  maxRehabBudget Float?
 }
 
 model Subscription {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  plan                 String   @default("FREE") // e.g., "FREE", "PRO", "ENTERPRISE"
+  status               String   @default("INACTIVE") // e.g., "ACTIVE", "PAST_DUE", "CANCELED"
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model UserSettings {
   id                     String   @id @default(uuid())
   userId                 String   @unique
   user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  stripeCustomerId       String?
-  stripeSubscriptionId   String?
-  plan                   String   @default("FREE") // e.g., "FREE", "PRO", "ENTERPRISE"
-  status                 String   @default("INACTIVE") // e.g., "ACTIVE", "PAST_DUE", "CANCELED"
-  createdAt              DateTime @default(now())
+  defaultDownPayment     Float    @default(20)
+  defaultMortgageRate    Float    @default(6.5)
+  defaultMortgageTerm    Float    @default(30)
+  defaultVacancyRate     Float    @default(5)
+  defaultMaintenanceRate Float    @default(5)
+  defaultClosingCost     Float    @default(3)
+  defaultSellingCommission Float  @default(6)
+  customLogoUrl          String?
+  customPdfHeader        String?
+  customPdfSubtitle      String?
+  customPdfDisclaimer    String?
+  brandColor             String?  @default("#0f766e")
   updatedAt              DateTime @updatedAt
 }
 
+model Order {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount          Float
+  currency        String   @default("USD")
+  plan            String
+  description     String?
+  status          String   @default("COMPLETED") // COMPLETED, FAILED, REFUNDED, PAID
+  stripeInvoiceId String?
+  receiptUrl      String?
+  createdAt       DateTime @default(now())
+}
+
+model CMSContent {
+  id        String   @id @default(uuid())
+  type      String // PRICING, TESTIMONIAL, FAQ, ANNOUNCEMENT
+  key       String? // optional slug/key for pricing tiers etc.
+  data      Json
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
 model PropertyAnalysis {
-  id             String   @id @default(uuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  address        String
-  city           String
-  state          String
-  zip            String
-  latitude       Float?
-  longitude      Float?
-  purchasePrice  Float
-  rehabCost      Float    @default(0)
-  arv            Float    @default(0)
-  rent           Float    @default(0)
-  downPayment    Float    @default(0)
-  taxes          Float    @default(0)
-  insurance      Float    @default(0)
-  hoa            Float    @default(0)
-  vacancyRate    Float    @default(5)
-  maintenanceRate Float   @default(5)
-  mortgageRate   Float    @default(6.5)
-  mortgageTerm   Float    @default(30)
-  cashFlow       Float?
-  roi            Float?
-  capRate        Float?
-  dscr           Float?
-  cashOnCash     Float?
-  createdAt      DateTime @default(now())
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address         String
+  city            String
+  state           String
+  zip             String
+  latitude        Float?
+  longitude       Float?
+  purchasePrice   Float
+  rehabCost       Float    @default(0)
+  arv             Float    @default(0)
+  rent            Float    @default(0)
+  downPayment     Float    @default(0)
+  taxes           Float    @default(0)
+  insurance       Float    @default(0)
+  hoa             Float    @default(0)
+  vacancyRate     Float    @default(5)
+  maintenanceRate Float    @default(5)
+  mortgageRate    Float    @default(6.5)
+  mortgageTerm    Float    @default(30)
+  cashFlow        Float?
+  roi             Float?
+  capRate         Float?
+  dscr            Float?
+  cashOnCash      Float?
+  createdAt       DateTime @default(now())
 }
 
 model FlipAnalysis {
-  id             String   @id @default(uuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  address        String
-  purchasePrice  Float
-  rehabCost      Float
-  arv            Float
-  financingCost  Float    @default(0)
-  holdingCost    Float    @default(0)
-  sellingCost    Float    @default(0)
-  profit         Float?
-  roi            Float?
-  mao            Float?
-  createdAt      DateTime @default(now())
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address       String
+  purchasePrice Float
+  rehabCost     Float
+  arv           Float
+  financingCost Float    @default(0)
+  holdingCost   Float    @default(0)
+  sellingCost   Float    @default(0)
+  profit        Float?
+  roi           Float?
+  mao           Float?
+  createdAt     DateTime @default(now())
 }
 
 model RentalAnalysis {
-  id             String   @id @default(uuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  address        String
-  rent           Float
-  expenses       Float
-  mortgage       Float
-  cashFlow       Float
-  capRate        Float
-  dscr           Float
-  growthRate     Float    @default(3)
-  createdAt      DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address    String
+  rent       Float
+  expenses   Float
+  mortgage   Float
+  cashFlow   Float
+  capRate    Float
+  dscr       Float
+  growthRate Float    @default(3)
+  createdAt  DateTime @default(now())
 }
 
 model DealPipeline {
@@ -139,6 +191,9 @@ model Coaching {
   status        String   @default("PENDING") // "PENDING", "CONFIRMED", "COMPLETED", "CANCELED"
   meetingLink   String?
   paymentStatus String   @default("UNPAID") // "PAID", "UNPAID"
+  coachName     String?
+  topic         String?
+  notes         String?
   createdAt     DateTime @default(now())
 }
 
@@ -146,7 +201,7 @@ model ActivityLog {
   id        String   @id @default(uuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  action    String   // "LOGIN", "CREATE_ANALYSIS", "EXPORT_REPORT", "UPDATE_SUBSCRIPTION", etc.
+  action    String // "LOGIN", "CREATE_ANALYSIS", "EXPORT_REPORT", "UPDATE_SUBSCRIPTION", etc.
   details   String?
   createdAt DateTime @default(now())
 }
