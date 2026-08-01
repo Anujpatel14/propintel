@@ -3,6 +3,7 @@
 import { prisma, withDbRetry } from '@/lib/db';
 import { requireAuth } from '@/lib/services/auth';
 import { revalidatePath } from 'next/cache';
+import { sumMrr } from '@/lib/billingMetrics';
 
 async function requireAdmin() {
   const user = await requireAuth();
@@ -82,6 +83,7 @@ export async function getAdminPlansAndSubscribers() {
     ),
     withDbRetry(() =>
       prisma.order.findMany({
+        include: { user: { select: { email: true, name: true } } },
         orderBy: { createdAt: 'desc' },
         take: 50,
       })
@@ -91,8 +93,7 @@ export async function getAdminPlansAndSubscribers() {
   const activePaid = subscriptions.filter(
     (s) => s.status === 'ACTIVE' && s.plan !== 'FREE'
   );
-  const planPrice = Object.fromEntries(plans.map((p) => [p.code, p.priceMonthly]));
-  const mrr = activePaid.reduce((sum, s) => sum + (planPrice[s.plan] ?? 0), 0);
+  const mrr = sumMrr(activePaid, plans);
 
   return {
     success: true as const,
@@ -101,7 +102,7 @@ export async function getAdminPlansAndSubscribers() {
     orders,
     metrics: {
       mrr,
-      arr: mrr * 12,
+      arr: Math.round(mrr * 12 * 100) / 100,
       totalSubscribers: activePaid.length,
       totalUsers: subscriptions.length,
       failedPayments: orders.filter((o) => o.status === 'FAILED').length,

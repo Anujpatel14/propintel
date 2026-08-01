@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { SignOutButton } from '@clerk/nextjs';
+import { useClerk } from '@clerk/nextjs';
 import { recordLogoutAuditAction } from '@/app/login/actions';
 import { BrandMark } from '@/components/BrandLogo';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -73,6 +73,7 @@ export default function DashboardShell({
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
+  const { signOut } = useClerk();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const isAdmin = user.role === 'ADMIN';
@@ -89,25 +90,26 @@ export default function DashboardShell({
     return pathname.startsWith(href);
   };
 
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await recordLogoutAuditAction();
+    } catch {
+      // Still sign out even if audit write fails
+    }
+    await signOut({ redirectUrl: '/login' });
+  };
+
   const SignOutControl = ({ className }: { className?: string }) => (
-    <SignOutButton redirectUrl="/login">
-      <button
-        type="button"
-        disabled={signingOut}
-        onClick={() => {
-          setSigningOut(true);
-          void recordLogoutAuditAction();
-        }}
-        className={className}
-      >
-        {signingOut ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <LogOut className="h-3.5 w-3.5" />
-        )}
-        {signingOut ? 'Signing out…' : 'Sign out'}
-      </button>
-    </SignOutButton>
+    <button type="button" disabled={signingOut} onClick={handleSignOut} className={className}>
+      {signingOut ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <LogOut className="h-3.5 w-3.5" />
+      )}
+      {signingOut ? 'Signing out…' : 'Sign out'}
+    </button>
   );
 
   const NavLinks = ({ onNavigate }: { onNavigate?: () => void }) => (

@@ -10,7 +10,9 @@ export default function AdminSettingsPage() {
 
       <div className="mx-auto max-w-3xl surface-card space-y-4 p-6 text-sm">
         {[
-          ['OpenAI API key', 'OPENAI_API_KEY'],
+          ['OpenRouter API key', 'OPENROUTER_API_KEY'],
+          ['OpenRouter model', 'OPENROUTER_MODEL (default openrouter/free)'],
+          ['OpenAI API key (optional)', 'OPENAI_API_KEY'],
           ['Property API key', 'RENTCAST_API_KEY / ATTOM'],
           ['Google Maps key', 'NEXT_PUBLIC_GOOGLE_MAPS_KEY'],
           ['Google Meet client ID', 'GOOGLE_CLIENT_ID'],
@@ -19,6 +21,7 @@ export default function AdminSettingsPage() {
           ['Google Calendar ID', 'GOOGLE_CALENDAR_ID'],
           ['Clerk publishable', 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY'],
           ['Stripe secret', 'STRIPE_SECRET_KEY'],
+          ['Stripe webhook secret', 'STRIPE_WEBHOOK_SECRET'],
         ].map(([label, env]) => (
           <label key={env} className="block space-y-1">
             <span className="text-[10px] font-bold uppercase text-[var(--muted)]">{label}</span>

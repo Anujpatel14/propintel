@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Syne, Outfit, Geist_Mono } from 'next/font/google';
+import { ClerkProvider } from '@clerk/nextjs';
 import Providers from './providers';
 import './globals.css';
 
@@ -45,16 +46,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${display.variable} ${body.variable} ${geistMono.variable} h-full antialiased`}
+    <ClerkProvider
+      afterSignOutUrl="/login"
+      signInUrl="/login"
+      signUpUrl="/login?tab=register"
     >
-      <body
-        className="flex min-h-full flex-col font-sans text-foreground"
-        suppressHydrationWarning
+      <html
+        lang="en"
+        className={`${display.variable} ${body.variable} ${geistMono.variable} h-full antialiased`}
       >
-        <Providers>{children}</Providers>
-      </body>
-    </html>
+        <body
+          className="flex min-h-full flex-col font-sans text-foreground"
+          suppressHydrationWarning
+        >
+          <Providers>{children}</Providers>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

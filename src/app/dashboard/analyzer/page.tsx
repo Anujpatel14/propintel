@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   Calculator,
   MapPin,
@@ -11,15 +12,27 @@ import {
   Check,
   AlertTriangle,
   Loader2,
+  X,
 } from 'lucide-react';
 import { lookupProperty } from '@/lib/services/properties';
-import { analyzeDeal } from '@/lib/services/ai';
 import { exportToPDF } from '@/lib/services/reports';
 import { savePropertyAnalysis, saveFlipAnalysis } from '@/app/actions/analysisActions';
+import {
+  analyzeDealAction,
+  type AiVerdictPreview,
+} from '@/app/actions/analyzeActions';
 import PageHeader from '@/components/dashboard/PageHeader';
 import SpotlightCard from '@/components/ui/SpotlightCard';
+import { AiVerdictCard } from '@/components/dashboard/AiVerdictCard';
+import { SkeletonRows, SkeletonValue } from '@/components/ui/Skeleton';
 
 type ModelType = 'hold' | 'flip' | 'rental';
+
+const MODE_OPTIONS: { id: ModelType; label: string }[] = [
+  { id: 'hold', label: 'Buy & Hold' },
+  { id: 'flip', label: 'Fix & Flip' },
+  { id: 'rental', label: 'Rental L/T' },
+];
 
 export default function PropertyAnalyzerPage() {
   const [modelType, setModelType] = useState<ModelType>('hold');
@@ -44,12 +57,14 @@ export default function PropertyAnalyzerPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [aiReport, setAiReport] = useState<string | null>(null);
+  const [aiPreview, setAiPreview] = useState<AiVerdictPreview | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [searchSuccessMsg, setSearchSuccessMsg] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
 
-  // Load user underwriting defaults when available
-  React.useEffect(() => {
+  useEffect(() => {
     (async () => {
       try {
         const { getUnderwritingSettings } = await import('@/app/actions/settingsActions');
@@ -63,7 +78,7 @@ export default function PropertyAnalyzerPage() {
           setMaintenanceRate(s.defaultMaintenanceRate);
         }
       } catch {
-        /* defaults stay as-is */
+        /* keep defaults */
       }
     })();
   }, []);
@@ -80,6 +95,8 @@ export default function PropertyAnalyzerPage() {
       setSearchSuccessMsg(
         `Comps found: ${data.beds}bd / ${data.baths}ba, ${data.sqft.toLocaleString()} sqft, built ${data.yearBuilt}. Inputs updated.`
       );
+      // Numbers changed — clear stale AI preview
+      setAiPreview(null);
     } catch (e) {
       console.error(e);
     } finally {
@@ -115,7 +132,6 @@ export default function PropertyAnalyzerPage() {
   const flipMao = arv * 0.7 - rehabCost;
   const flipRoi = totalInvestment > 0 ? (flipProfit / totalInvestment) * 100 : 0;
 
-  // Long-term rental projection (simplified)
   let projectedEquity = downPayment + rehabCost;
   let cumulativeCash = 0;
   let futureValue = purchasePrice + rehabCost;
@@ -134,11 +150,32 @@ export default function PropertyAnalyzerPage() {
       ? (Math.pow((totalInvestment + totalReturn) / totalInvestment, 1 / projectionYears) - 1) * 100
       : 0;
 
+  const handleModeChange = (next: ModelType) => {
+    if (isAnalyzing) return;
+    setModelType(next);
+    if (aiPreview) {
+      setAiPreview(null);
+      setNotice('Strategy changed — run AI again for a fresh verdict.');
+    }
+  };
+
+  const discardAi = () => {
+    setAiPreview(null);
+    setAiError(null);
+    setNotice('AI verdict discarded. Nothing was saved.');
+  };
+
   const handleAIAnalysis = async () => {
+    if (!address.trim()) {
+      setAiError('Add a property address before running AI.');
+      return;
+    }
     setIsAnalyzing(true);
-    setAiReport(null);
+    setAiError(null);
+    setNotice(null);
+    setSaveSuccess(false);
     try {
-      const report = await analyzeDeal({
+      const result = await analyzeDealAction({
         address,
         purchasePrice,
         rehabCost,
@@ -149,12 +186,97 @@ export default function PropertyAnalyzerPage() {
         capRate,
         dscr,
         cashOnCash,
+        modelType,
       });
-      setAiReport(report);
+      if (!result.success) {
+        setAiError(result.error || 'Analysis failed');
+        return;
+      }
+      setAiPreview(result.analysis);
+      setNotice('AI finished. Save this deal to keep it, or discard the verdict.');
     } catch (e) {
       console.error(e);
+      setAiError(e instanceof Error ? e.message : 'Analysis failed');
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const parseAddressParts = () => {
+    const parts = address.split(',').map((s) => s.trim());
+    const city = parts[1] || 'Unknown';
+    const statePart = parts[2] || 'TX';
+    const state = statePart.substring(0, 2).toUpperCase();
+    return { city, state };
+  };
+
+  const aiPayload = aiPreview
+    ? {
+        verdict: aiPreview.verdict,
+        headline: aiPreview.headline,
+        summary: aiPreview.summary,
+        strengths: aiPreview.strengths,
+        risks: aiPreview.risks,
+        provider: aiPreview.provider,
+        modelName: aiPreview.modelName,
+        reportText: aiPreview.reportText,
+      }
+    : null;
+
+  const handleSaveDeal = async () => {
+    if (!address.trim()) {
+      setSaveError('Add a property address before saving.');
+      return;
+    }
+    if (!aiPreview) {
+      setSaveError('Run AI analysis first, then save the deal.');
+      return;
+    }
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      if (modelType === 'flip') {
+        await saveFlipAnalysis({
+          address,
+          purchasePrice,
+          rehabCost,
+          arv,
+          financingCost: flipFinancing,
+          holdingCost: flipHolding,
+          sellingCost: flipSelling,
+          ai: aiPayload,
+        });
+      } else {
+        const { city, state } = parseAddressParts();
+        await savePropertyAnalysis({
+          address,
+          city,
+          state,
+          zip,
+          purchasePrice,
+          rehabCost,
+          arv,
+          rent,
+          downPayment: downPaymentPercent,
+          taxes: taxes * 12,
+          insurance: insurance * 12,
+          hoa,
+          vacancyRate,
+          maintenanceRate,
+          mortgageRate,
+          mortgageTerm,
+          strategyType: modelType === 'rental' ? 'rental' : 'hold',
+          ai: aiPayload,
+        });
+      }
+      setSaveSuccess(true);
+      setNotice('Deal saved. You can find it under Saved deals.');
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (e) {
+      console.error(e);
+      setSaveError(e instanceof Error ? e.message : 'Could not save deal');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -178,7 +300,10 @@ export default function PropertyAnalyzerPage() {
         { label: 'Est. rent', value: `$${rent}/mo` },
         { label: 'Operating expenses', value: `$${totalOperatingExpenses.toFixed(2)}/mo` },
       ],
-      aiAnalysis: aiReport || 'AI analysis not generated for this report yet.',
+      aiAnalysis:
+        aiPreview?.reportText ||
+        aiPreview?.headline ||
+        'AI analysis not generated for this report yet.',
     };
 
     if (modelType === 'flip') {
@@ -200,115 +325,41 @@ export default function PropertyAnalyzerPage() {
     exportToPDF(reportData);
   };
 
-  const parseAddressParts = () => {
-    const parts = address.split(',').map((s) => s.trim());
-    const city = parts[1] || 'Unknown';
-    const statePart = parts[2] || 'TX';
-    const state = statePart.substring(0, 2).toUpperCase();
-    return { city, state };
-  };
-
-  const handleSaveDeal = async () => {
-    setIsSaving(true);
-    try {
-      if (modelType === 'flip') {
-        await saveFlipAnalysis({
-          address,
-          purchasePrice,
-          rehabCost,
-          arv,
-          financingCost: flipFinancing,
-          holdingCost: flipHolding,
-          sellingCost: flipSelling,
-        });
-      } else {
-        const { city, state } = parseAddressParts();
-        await savePropertyAnalysis({
-          address,
-          city,
-          state,
-          zip,
-          purchasePrice,
-          rehabCost,
-          arv,
-          rent,
-          downPayment: downPaymentPercent,
-          taxes: taxes * 12,
-          insurance: insurance * 12,
-          hoa,
-          vacancyRate,
-          maintenanceRate,
-          mortgageRate,
-          mortgageTerm,
-        });
-      }
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const tabs: { id: ModelType; label: string }[] = [
-    { id: 'hold', label: 'Buy & Hold', short: 'Hold' },
-    { id: 'flip', label: 'Fix & Flip', short: 'Flip' },
-    { id: 'rental', label: 'Rental L/T', short: 'Rental' },
-  ];
-
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <PageHeader
         title="Property analyzer"
-        description="Underwrite cash flow, flips, and long-term rental growth."
+        description="1) Enter numbers · 2) Choose strategy · 3) Run AI · 4) Save to deals or discard."
         actions={
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Link
+              href="/dashboard/deals"
+              className="btn-secondary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs"
+            >
+              View saved deals
+            </Link>
             <button
+              type="button"
               onClick={handleExportPDF}
               className="btn-secondary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs"
             >
               <FileText className="h-4 w-4 text-teal-700" /> Export PDF
             </button>
-            <button
-              onClick={handleSaveDeal}
-              disabled={isSaving}
-              className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs disabled:opacity-50"
-            >
-              {isSaving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : saveSuccess ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              {saveSuccess ? 'Saved' : 'Save deal'}
-            </button>
           </div>
         }
       />
 
-      <div className="relative flex w-full max-w-lg overflow-x-auto rounded-xl border border-[var(--border)] bg-white p-1">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setModelType(tab.id)}
-            className={`relative z-10 min-w-[5.5rem] flex-1 rounded-lg py-2.5 text-xs font-bold transition ${
-              modelType === tab.id ? 'text-teal-50' : 'text-[var(--muted)] hover:text-foreground'
-            }`}
-          >
-            <span className="sm:hidden">{tab.short}</span>
-            <span className="hidden sm:inline">{tab.label}</span>
-          </button>
-        ))}
+      {(notice || saveError) && (
         <div
-          className="absolute top-1 bottom-1 rounded-lg bg-teal-700 transition-all duration-300"
-          style={{
-            width: `calc(${100 / tabs.length}% - 4px)`,
-            left: `calc(${tabs.findIndex((t) => t.id === modelType) * (100 / tabs.length)}% + 2px)`,
-          }}
-        />
-      </div>
+          className={`rounded-xl px-4 py-3 text-xs ${
+            saveError
+              ? 'border border-red-200 bg-red-50 text-red-700'
+              : 'border border-teal-700/20 bg-teal-50 text-teal-900'
+          }`}
+        >
+          {saveError || notice}
+        </div>
+      )}
 
       <div className="surface-card flex flex-col items-stretch gap-4 p-5 md:flex-row md:items-end">
         <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-3">
@@ -321,7 +372,10 @@ export default function PropertyAnalyzerPage() {
               <input
                 type="text"
                 value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                onChange={(e) => {
+                  setAddress(e.target.value);
+                  if (aiPreview) setAiPreview(null);
+                }}
                 className="w-full glass-input py-2.5 pr-4 pl-10 text-sm"
               />
             </div>
@@ -337,9 +391,10 @@ export default function PropertyAnalyzerPage() {
           </div>
         </div>
         <button
+          type="button"
           onClick={handlePropertyLookup}
-          disabled={isSearching}
-              className="btn-ink inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 px-5 py-3.5 text-xs disabled:opacity-50"
+          disabled={isSearching || isAnalyzing}
+          className="btn-ink inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 px-5 py-3.5 text-xs disabled:opacity-50"
         >
           {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
           Lookup comps
@@ -355,15 +410,58 @@ export default function PropertyAnalyzerPage() {
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
         <div className="space-y-6 lg:col-span-8">
           <div className="surface-card space-y-6 p-6">
-            <h2 className="flex items-center gap-2 text-base font-bold">
-              <Calculator className="h-5 w-5 text-teal-700" />
-              Cost & loan configuration
-            </h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="flex items-center gap-2 text-base font-bold">
+                <Calculator className="h-5 w-5 text-teal-700" />
+                Cost & loan configuration
+              </h2>
+              <label className="flex min-w-[12rem] flex-col gap-1 sm:items-end">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
+                  Strategy mode
+                </span>
+                <select
+                  value={modelType}
+                  disabled={isAnalyzing}
+                  onChange={(e) => handleModeChange(e.target.value as ModelType)}
+                  className="glass-input min-h-10 w-full bg-white px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60 sm:w-48"
+                >
+                  {MODE_OPTIONS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                {isAnalyzing && (
+                  <span className="text-[10px] text-amber-800">Locked while AI is running</span>
+                )}
+              </label>
+            </div>
 
             <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-              <MoneyField label="Purchase price" value={purchasePrice} onChange={setPurchasePrice} />
-              <MoneyField label="Rehab budget" value={rehabCost} onChange={setRehabCost} />
-              <MoneyField label="Est. ARV" value={arv} onChange={setArv} />
+              <MoneyField
+                label="Purchase price"
+                value={purchasePrice}
+                onChange={(n) => {
+                  setPurchasePrice(n);
+                  if (aiPreview) setAiPreview(null);
+                }}
+              />
+              <MoneyField
+                label="Rehab budget"
+                value={rehabCost}
+                onChange={(n) => {
+                  setRehabCost(n);
+                  if (aiPreview) setAiPreview(null);
+                }}
+              />
+              <MoneyField
+                label="Est. ARV"
+                value={arv}
+                onChange={(n) => {
+                  setArv(n);
+                  if (aiPreview) setAiPreview(null);
+                }}
+              />
               <NumberField label="Down payment %" value={downPaymentPercent} onChange={setDownPaymentPercent} />
               <NumberField label="Mortgage rate %" value={mortgageRate} onChange={setMortgageRate} step={0.1} />
               <NumberField label="Term (years)" value={mortgageTerm} onChange={setMortgageTerm} />
@@ -400,113 +498,145 @@ export default function PropertyAnalyzerPage() {
         </div>
 
         <div className="space-y-5 lg:col-span-4">
-          <SpotlightCard className="space-y-5 p-6">
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--muted)]">
-              Analysis summary
-            </h3>
+          <SpotlightCard className="p-5 sm:p-6">
+            <div className="space-y-5">
+              <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--muted)]">
+                Analysis summary
+              </h3>
 
-            {modelType === 'hold' && (
-              <MetricList
-                rows={[
-                  {
-                    label: 'Monthly cash flow',
-                    value: `$${cashFlow.toFixed(2)}`,
-                    tone: cashFlow >= 0 ? 'good' : 'bad',
-                  },
-                  { label: 'Cash-on-cash', value: `${cashOnCash.toFixed(2)}%` },
-                  { label: 'Cap rate', value: `${capRate.toFixed(2)}%` },
-                  {
-                    label: 'DSCR',
-                    value: dscr.toFixed(2),
-                    tone: dscr >= 1.25 ? 'good' : 'warn',
-                  },
-                ]}
-                footnote={`Capital required: $${totalInvestment.toLocaleString()}`}
-              />
-            )}
+              {modelType === 'hold' && (
+                <MetricList
+                  rows={[
+                    {
+                      label: 'Monthly cash flow',
+                      value: `$${cashFlow.toFixed(2)}`,
+                      tone: cashFlow >= 0 ? 'good' : 'bad',
+                    },
+                    { label: 'Cash-on-cash', value: `${cashOnCash.toFixed(2)}%` },
+                    { label: 'Cap rate', value: `${capRate.toFixed(2)}%` },
+                    {
+                      label: 'DSCR',
+                      value: dscr.toFixed(2),
+                      tone: dscr >= 1.25 ? 'good' : 'warn',
+                    },
+                  ]}
+                  footnote={`Capital required: $${totalInvestment.toLocaleString()}`}
+                />
+              )}
 
-            {modelType === 'flip' && (
-              <MetricList
-                rows={[
-                  {
-                    label: 'Net profit',
-                    value: `$${Math.round(flipProfit).toLocaleString()}`,
-                    tone: flipProfit >= 0 ? 'good' : 'bad',
-                  },
-                  { label: 'Flip ROI', value: `${flipRoi.toFixed(2)}%` },
-                  { label: 'MAO (70% rule)', value: `$${Math.round(flipMao).toLocaleString()}` },
-                ]}
-                footnote={
-                  <span className="flex items-start gap-2 text-left">
-                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#c4a050]" />
-                    MAO uses ARV × 70% − rehab.
-                  </span>
-                }
-              />
-            )}
+              {modelType === 'flip' && (
+                <MetricList
+                  rows={[
+                    {
+                      label: 'Net profit',
+                      value: `$${Math.round(flipProfit).toLocaleString()}`,
+                      tone: flipProfit >= 0 ? 'good' : 'bad',
+                    },
+                    { label: 'Flip ROI', value: `${flipRoi.toFixed(2)}%` },
+                    { label: 'MAO (70% rule)', value: `$${Math.round(flipMao).toLocaleString()}` },
+                  ]}
+                  footnote={
+                    <span className="flex items-start gap-2 text-left">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#c4a050]" />
+                      MAO uses ARV × 70% − rehab.
+                    </span>
+                  }
+                />
+              )}
 
-            {modelType === 'rental' && (
-              <MetricList
-                rows={[
-                  {
-                    label: 'Monthly cash flow',
-                    value: `$${cashFlow.toFixed(2)}`,
-                    tone: cashFlow >= 0 ? 'good' : 'bad',
-                  },
-                  {
-                    label: `${projectionYears}yr equity`,
-                    value: `$${Math.round(projectedEquity).toLocaleString()}`,
-                  },
-                  {
-                    label: 'Cumulative CF',
-                    value: `$${Math.round(cumulativeCash).toLocaleString()}`,
-                  },
-                  {
-                    label: 'Annualized return',
-                    value: `${annualizedReturn.toFixed(2)}%`,
-                    tone: 'good',
-                  },
-                ]}
-                footnote={`DSCR ${dscr.toFixed(2)} · Cap ${capRate.toFixed(2)}%`}
-              />
-            )}
+              {modelType === 'rental' && (
+                <MetricList
+                  rows={[
+                    {
+                      label: 'Monthly cash flow',
+                      value: `$${cashFlow.toFixed(2)}`,
+                      tone: cashFlow >= 0 ? 'good' : 'bad',
+                    },
+                    {
+                      label: `${projectionYears}yr equity`,
+                      value: `$${Math.round(projectedEquity).toLocaleString()}`,
+                    },
+                    {
+                      label: 'Cumulative CF',
+                      value: `$${Math.round(cumulativeCash).toLocaleString()}`,
+                    },
+                    {
+                      label: 'Annualized return',
+                      value: `${annualizedReturn.toFixed(2)}%`,
+                      tone: 'good',
+                    },
+                  ]}
+                  footnote={`DSCR ${dscr.toFixed(2)} · Cap ${capRate.toFixed(2)}%`}
+                />
+              )}
 
-            <button
-              onClick={handleAIAnalysis}
-              disabled={isAnalyzing}
-              className="btn-ink flex w-full cursor-pointer items-center justify-center gap-2 py-3 text-xs disabled:opacity-50"
-            >
-              {isAnalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cpu className="h-4 w-4" />}
-              {isAnalyzing ? 'Underwriting…' : 'Run AI deal analysis'}
-            </button>
+              <button
+                type="button"
+                onClick={handleAIAnalysis}
+                disabled={isAnalyzing}
+                className="btn-ink flex w-full cursor-pointer items-center justify-center gap-2 py-3 text-xs disabled:opacity-50"
+              >
+                {isAnalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cpu className="h-4 w-4" />}
+                {isAnalyzing ? 'AI analyzing…' : aiPreview ? 'Re-run AI analysis' : 'Run AI analysis'}
+              </button>
+              {aiError && <p className="text-center text-xs text-red-600">{aiError}</p>}
+            </div>
           </SpotlightCard>
         </div>
       </div>
 
-      {aiReport && (
-        <div className="surface-card relative overflow-hidden p-7">
-          <div className="mb-4 flex items-center justify-between border-b border-[var(--border)] pb-4">
-            <h3 className="flex items-center gap-2 text-lg font-bold">
-              <Cpu className="h-5 w-5 text-teal-700" /> AI underwriting verdict
-            </h3>
-            <span className="text-[10px] font-semibold uppercase text-[var(--muted-foreground)]">
-              Generative report
-            </span>
+      <div className="space-y-4">
+        {isAnalyzing && (
+          <div className="surface-card space-y-4 p-6">
+            <div className="flex items-center gap-2 text-sm font-bold">
+              <Cpu className="h-4 w-4 text-teal-700" /> AI underwriting verdict
+            </div>
+            <SkeletonValue className="h-6 w-40" />
+            <SkeletonRows rows={4} cols={2} />
           </div>
-          <div
-            className="prose max-w-none space-y-3 text-sm leading-relaxed text-[var(--muted)]"
-            dangerouslySetInnerHTML={{
-              __html: aiReport
-                .replace(/## (.*)/g, '<h4 class="text-foreground font-bold text-base mt-4">$1</h4>')
-                .replace(/### (.*)/g, '<h5 class="text-foreground font-bold text-sm mt-3">$1</h5>')
-                .replace(/\* \*\*(.*?)\*\*:(.*)/g, '<li><strong class="text-teal-800">$1:</strong>$2</li>')
-                .replace(/\* (.*)/g, '<li>$1</li>')
-                .replace(/\n\n/g, '<br/>')
-                .replace(/---/g, '<hr class="border-[var(--border)] my-4" />'),
-            }}
-          />
-        </div>
-      )}
+        )}
+
+        {!isAnalyzing && aiPreview && (
+          <div className="space-y-3">
+            <AiVerdictCard analysis={aiPreview} />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={discardAi}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-[var(--border)] px-4 py-2.5 text-xs font-semibold"
+              >
+                <X className="h-3.5 w-3.5" /> Discard
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDeal}
+                disabled={isSaving || saveSuccess}
+                className="btn-primary inline-flex cursor-pointer items-center gap-2 px-4 py-2.5 text-xs disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : saveSuccess ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                {saveSuccess ? 'Saved to deals' : 'Save to deals'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!isAnalyzing && !aiPreview && (
+          <div className="rounded-2xl border border-dashed border-[var(--border)] bg-white/60 px-6 py-10 text-center">
+            <Cpu className="mx-auto h-8 w-8 text-teal-700/50" />
+            <p className="mt-3 text-sm font-semibold text-foreground">Ready for AI</p>
+            <p className="mx-auto mt-1 max-w-md text-xs text-[var(--muted)]">
+              Fill your numbers, pick a strategy, then run AI. You can save the deal afterward —
+              it will show up on Saved deals — or discard the verdict.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -591,7 +721,9 @@ function MetricList({
           </span>
         </div>
       ))}
-      {footnote && <div className="pt-1 text-center text-[10px] text-[var(--muted-foreground)]">{footnote}</div>}
+      {footnote && (
+        <div className="pt-1 text-center text-[10px] text-[var(--muted-foreground)]">{footnote}</div>
+      )}
     </div>
   );
 }

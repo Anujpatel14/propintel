@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useTransition } from 'react';
 import {
-  Loader2,
   DollarSign,
   CreditCard,
   AlertTriangle,
@@ -14,6 +13,7 @@ import {
 } from 'lucide-react';
 import PageHeader from '@/components/dashboard/PageHeader';
 import SpotlightCard from '@/components/ui/SpotlightCard';
+import { Skeleton, SkeletonRows, SkeletonText, SkeletonValue } from '@/components/ui/Skeleton';
 import { usePageTitle } from '@/components/DocumentTitle';
 import {
   getAdminPaymentDashboard,
@@ -21,6 +21,7 @@ import {
 } from '@/app/actions/paymentAdminActions';
 
 type Tab = 'overview' | 'transactions' | 'failed' | 'events' | 'customers';
+type Dashboard = Awaited<ReturnType<typeof getAdminPaymentDashboard>>;
 
 const TAB_TITLES: Record<Tab, string> = {
   overview: 'Payments overview',
@@ -33,9 +34,7 @@ const TAB_TITLES: Record<Tab, string> = {
 export default function AdminPaymentsPage() {
   const [tab, setTab] = useState<Tab>('overview');
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<Awaited<ReturnType<typeof getAdminPaymentDashboard>> | null>(
-    null
-  );
+  const [data, setData] = useState<Dashboard | null>(null);
   const [, startTransition] = useTransition();
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -61,7 +60,7 @@ export default function AdminPaymentsPage() {
     startTransition(async () => {
       const res = await adminRefundOrder(orderId);
       if (res.success) {
-        setNotice(res.mode === 'stripe' ? 'Stripe refund issued.' : 'Order marked refunded (local).');
+        setNotice(res.mode === 'stripe' ? 'Refund issued successfully.' : 'Order marked as refunded.');
         await load();
       } else {
         setNotice(res.error || 'Refund failed');
@@ -77,19 +76,10 @@ export default function AdminPaymentsPage() {
     { key: 'customers', label: 'Customers' },
   ];
 
-  if (loading || !data) {
-    return (
-      <div className="mx-auto max-w-7xl space-y-8">
-        <PageHeader
-          title="Payments operations"
-          description="Revenue, Stripe health, invoices, refunds, and failed charges."
-        />
-        <div className="flex justify-center py-20 text-[var(--muted)]">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading payments…
-        </div>
-      </div>
-    );
-  }
+  const metrics = data?.metrics;
+  const stripeConfigured = data?.stripeConfigured ?? false;
+  const stripePublishableSet = data?.stripePublishableSet ?? false;
+  const stripeWebhookSet = data?.stripeWebhookSet ?? false;
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
@@ -100,9 +90,11 @@ export default function AdminPaymentsPage() {
           <button
             type="button"
             onClick={load}
-            className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold"
+            disabled={loading}
+            className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold disabled:opacity-60"
           >
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Refreshing…' : 'Refresh'}
           </button>
         }
       />
@@ -113,12 +105,14 @@ export default function AdminPaymentsPage() {
         </div>
       )}
 
-      {/* Stripe connection status */}
+      {/* Stripe connection — shell always visible; status chips & balances skeleton while loading */}
       <div
         className={`rounded-2xl border p-5 ${
-          data.stripeConfigured
-            ? 'border-teal-700/25 bg-teal-700/5'
-            : 'border-amber-500/30 bg-amber-50'
+          loading && !data
+            ? 'border-[var(--border)] bg-white'
+            : stripeConfigured
+              ? 'border-teal-700/25 bg-teal-700/5'
+              : 'border-amber-500/30 bg-amber-50'
         }`}
       >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -127,15 +121,32 @@ export default function AdminPaymentsPage() {
               <ShieldCheck className="h-4 w-4 text-teal-700" />
               Stripe connection
             </div>
-            <p className="text-xs text-[var(--muted)]">
-              {data.stripeConfigured
-                ? 'Live Stripe secret key detected. Checkout, portal, webhooks, and refunds are enabled when price IDs and webhook secret are set.'
-                : 'Stripe credentials are not set yet. Investors can still switch plans locally; add keys in .env to go live.'}
-            </p>
+            {loading && !data ? (
+              <div className="space-y-2">
+                <Skeleton className="h-3 w-full max-w-xl" />
+                <Skeleton className="h-3 w-72 max-w-full" />
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--muted)]">
+                {stripeConfigured
+                  ? 'Live Stripe secret key detected. Checkout, portal, webhooks, and refunds are enabled when price IDs and webhook secret are set.'
+                  : 'Stripe credentials are not set yet. Investors can still switch plans locally; add keys in .env to go live.'}
+              </p>
+            )}
             <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase">
-              <Badge ok={data.stripeConfigured} label="Secret key" />
-              <Badge ok={data.stripePublishableSet} label="Publishable key" />
-              <Badge ok={data.stripeWebhookSet} label="Webhook secret" />
+              {loading ? (
+                <>
+                  <Skeleton className="h-6 w-24 rounded-md" />
+                  <Skeleton className="h-6 w-28 rounded-md" />
+                  <Skeleton className="h-6 w-28 rounded-md" />
+                </>
+              ) : (
+                <>
+                  <Badge ok={stripeConfigured} label="Secret key" />
+                  <Badge ok={stripePublishableSet} label="Publishable key" />
+                  <Badge ok={stripeWebhookSet} label="Webhook secret" />
+                </>
+              )}
             </div>
           </div>
           <a
@@ -147,18 +158,33 @@ export default function AdminPaymentsPage() {
             Open Stripe Dashboard <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </div>
-        {data.stripeBalance && (
-          <div className="mt-4 grid grid-cols-2 gap-3 text-xs sm:max-w-md">
-            <div className="rounded-xl border border-[var(--border)] bg-white p-3">
-              <div className="text-[var(--muted)]">Available</div>
-              <div className="text-lg font-extrabold">${data.stripeBalance.available.toFixed(2)}</div>
-            </div>
-            <div className="rounded-xl border border-[var(--border)] bg-white p-3">
-              <div className="text-[var(--muted)]">Pending</div>
-              <div className="text-lg font-extrabold">${data.stripeBalance.pending.toFixed(2)}</div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3 text-xs sm:max-w-md">
+          <div className="rounded-xl border border-[var(--border)] bg-white p-3">
+            <div className="text-[var(--muted)]">Available</div>
+            <div className="mt-1 text-lg font-extrabold">
+              {loading ? (
+                <SkeletonValue className="h-7 w-20" />
+              ) : data?.stripeBalance ? (
+                `$${data.stripeBalance.available.toFixed(2)}`
+              ) : (
+                '—'
+              )}
             </div>
           </div>
-        )}
+          <div className="rounded-xl border border-[var(--border)] bg-white p-3">
+            <div className="text-[var(--muted)]">Pending</div>
+            <div className="mt-1 text-lg font-extrabold">
+              {loading ? (
+                <SkeletonValue className="h-7 w-20" />
+              ) : data?.stripeBalance ? (
+                `$${data.stripeBalance.pending.toFixed(2)}`
+              ) : (
+                '—'
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -184,31 +210,49 @@ export default function AdminPaymentsPage() {
             <Kpi
               icon={DollarSign}
               label="MRR (active only)"
-              value={`$${data.metrics.mrr.toLocaleString()}`}
+              loading={loading}
+              value={metrics ? `$${metrics.mrr.toLocaleString()}` : undefined}
             />
             <Kpi
               icon={AlertTriangle}
               label="At-risk MRR (past due)"
-              value={`$${data.metrics.atRiskMrr.toLocaleString()}`}
+              loading={loading}
+              value={metrics ? `$${metrics.atRiskMrr.toLocaleString()}` : undefined}
             />
             <Kpi
               icon={Wallet}
               label="Collected revenue"
-              value={`$${data.metrics.revenue.toLocaleString()}`}
+              loading={loading}
+              value={metrics ? `$${metrics.revenue.toLocaleString()}` : undefined}
             />
-            <Kpi icon={CreditCard} label="Paid subscribers" value={String(data.metrics.activePaid)} />
+            <Kpi
+              icon={CreditCard}
+              label="Paid subscribers"
+              loading={loading}
+              value={metrics ? String(metrics.activePaid) : undefined}
+            />
             <Kpi
               icon={AlertTriangle}
               label="Failed / dunning"
-              value={`${data.metrics.failedCount} fails · ${data.metrics.pastDueCount} past due`}
+              loading={loading}
+              value={
+                metrics
+                  ? `${metrics.failedCount} fails · ${metrics.pastDueCount} past due`
+                  : undefined
+              }
             />
             <Kpi
               icon={RotateCcw}
               label="Refunds"
-              value={`${data.metrics.refundedCount} · $${data.metrics.refundedAmount.toFixed(0)}`}
+              loading={loading}
+              value={
+                metrics
+                  ? `${metrics.refundedCount} · $${metrics.refundedAmount.toFixed(0)}`
+                  : undefined
+              }
             />
           </div>
-          {data.pastDue.length > 0 && (
+          {!loading && data && data.pastDue.length > 0 && (
             <div className="surface-card space-y-2 p-5 text-xs">
               <h3 className="text-sm font-bold text-amber-900">Past-due customers (dunning)</h3>
               <p className="text-[var(--muted)]">
@@ -227,61 +271,115 @@ export default function AdminPaymentsPage() {
               ))}
             </div>
           )}
+          {loading && (
+            <div className="surface-card space-y-3 p-5">
+              <Skeleton className="h-4 w-48" />
+              <SkeletonText className="w-full max-w-lg" />
+              <SkeletonRows rows={2} cols={2} />
+            </div>
+          )}
         </div>
       )}
 
       {tab === 'transactions' && (
-        <div className="surface-card overflow-x-auto p-5">
-          <h2 className="mb-4 text-sm font-bold">Invoices & orders</h2>
-          {data.orders.length === 0 ? (
-            <p className="text-xs text-[var(--muted)]">No transactions yet.</p>
-          ) : (
-            <table className="w-full min-w-[720px] text-left text-xs">
-              <thead>
-                <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)] uppercase">
-                  <th className="py-2">Customer</th>
-                  <th className="px-3 py-2">Plan</th>
-                  <th className="px-3 py-2">Amount</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Date</th>
-                  <th className="py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]">
-                {data.orders.map((o) => (
-                  <tr key={o.id}>
-                    <td className="py-2.5">
-                      <div className="font-semibold">{o.user.name || o.user.email}</div>
-                      <div className="text-[10px] text-[var(--muted)]">{o.user.email}</div>
-                    </td>
-                    <td className="px-3 py-2.5">{o.plan}</td>
-                    <td className="px-3 py-2.5 font-bold text-teal-800">${o.amount.toFixed(2)}</td>
-                    <td className="px-3 py-2.5 uppercase">{o.status}</td>
-                    <td className="px-3 py-2.5 text-[var(--muted)]">
-                      {new Date(o.createdAt).toLocaleString()}
-                    </td>
-                    <td className="py-2.5 text-right">
-                      {o.status !== 'REFUNDED' && (
-                        <button
-                          type="button"
-                          onClick={() => handleRefund(o.id)}
-                          className="cursor-pointer rounded-lg border border-red-200 px-2.5 py-1.5 text-[10px] font-bold text-red-700 hover:bg-red-50"
-                        >
-                          Refund
-                        </button>
-                      )}
-                    </td>
+        <div className="space-y-4">
+          <div className="surface-card overflow-x-auto p-5">
+            <h2 className="mb-4 text-sm font-bold">App orders (Neon)</h2>
+            {loading ? (
+              <SkeletonRows rows={6} cols={5} />
+            ) : !data || data.orders.length === 0 ? (
+              <p className="text-xs text-[var(--muted)]">No transactions yet.</p>
+            ) : (
+              <table className="w-full min-w-[720px] text-left text-xs">
+                <thead>
+                  <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)] uppercase">
+                    <th className="py-2">Customer</th>
+                    <th className="px-3 py-2">Plan</th>
+                    <th className="px-3 py-2">Amount</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Date</th>
+                    <th className="py-2 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {data.orders.map((o) => (
+                    <tr key={o.id}>
+                      <td className="py-2.5">
+                        <div className="font-semibold">{o.user.name || o.user.email}</div>
+                        <div className="text-[10px] text-[var(--muted)]">{o.user.email}</div>
+                      </td>
+                      <td className="px-3 py-2.5">{o.plan}</td>
+                      <td className="px-3 py-2.5 font-bold text-teal-800">${o.amount.toFixed(2)}</td>
+                      <td className="px-3 py-2.5 uppercase">{o.status}</td>
+                      <td className="px-3 py-2.5 text-[var(--muted)]">
+                        {new Date(o.createdAt).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 text-right">
+                        {o.status !== 'REFUNDED' && (
+                          <button
+                            type="button"
+                            onClick={() => handleRefund(o.id)}
+                            className="cursor-pointer rounded-lg border border-red-200 px-2.5 py-1.5 text-[10px] font-bold text-red-700 hover:bg-red-50"
+                          >
+                            Refund
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {stripeConfigured && (
+            <div className="surface-card overflow-x-auto p-5">
+              <h2 className="mb-1 text-sm font-bold">Stripe invoices (live)</h2>
+              <p className="mb-4 text-[11px] text-[var(--muted)]">
+                Pulled directly from Stripe — source of truth for charges.
+              </p>
+              {loading ? (
+                <SkeletonRows rows={4} cols={4} />
+              ) : !data?.stripeInvoices?.length ? (
+                <p className="text-xs text-[var(--muted)]">No Stripe invoices found yet.</p>
+              ) : (
+                <table className="w-full min-w-[640px] text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)] uppercase">
+                      <th className="py-2">Customer</th>
+                      <th className="px-3 py-2">Description</th>
+                      <th className="px-3 py-2">Amount</th>
+                      <th className="px-3 py-2">Status</th>
+                      <th className="py-2">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {data.stripeInvoices.map((inv) => (
+                      <tr key={inv.id}>
+                        <td className="py-2.5">{inv.customerEmail || '—'}</td>
+                        <td className="px-3 py-2.5">{inv.description}</td>
+                        <td className="px-3 py-2.5 font-bold text-teal-800">
+                          ${inv.amount.toFixed(2)}
+                        </td>
+                        <td className="px-3 py-2.5 uppercase">{inv.status}</td>
+                        <td className="py-2.5 text-[var(--muted)]">
+                          {new Date(inv.createdAt).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           )}
         </div>
       )}
 
       {tab === 'failed' && (
         <div className="surface-card max-h-[70vh] space-y-3 overflow-y-auto p-5 text-xs">
-          {data.failedEvents.length === 0 ? (
+          {loading ? (
+            <SkeletonRows rows={5} cols={3} />
+          ) : !data || data.failedEvents.length === 0 ? (
             <p className="text-[var(--muted)]">No failed payment events.</p>
           ) : (
             data.failedEvents.map((e) => (
@@ -302,7 +400,9 @@ export default function AdminPaymentsPage() {
 
       {tab === 'events' && (
         <div className="surface-card max-h-[70vh] space-y-2 overflow-y-auto p-5 text-xs">
-          {data.events.length === 0 ? (
+          {loading ? (
+            <SkeletonRows rows={6} cols={3} />
+          ) : !data || data.events.length === 0 ? (
             <p className="text-[var(--muted)]">
               No Stripe/payment events yet. They appear after checkout, webhooks, and portal opens.
             </p>
@@ -335,31 +435,41 @@ export default function AdminPaymentsPage() {
 
       {tab === 'customers' && (
         <div className="surface-card overflow-x-auto p-5">
-          <table className="w-full min-w-[640px] text-left text-xs">
-            <thead>
-              <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)] uppercase">
-                <th className="py-2">Customer</th>
-                <th className="px-3 py-2">Plan</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="py-2">Stripe customer</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)]">
-              {data.subscriptions.map((s) => (
-                <tr key={s.id}>
-                  <td className="py-2.5">
-                    <div className="font-semibold">{s.user.name || s.user.email}</div>
-                    <div className="text-[10px] text-[var(--muted)]">{s.user.email}</div>
-                  </td>
-                  <td className="px-3 py-2.5 font-bold text-teal-800">{s.plan}</td>
-                  <td className="px-3 py-2.5 uppercase">{s.status}</td>
-                  <td className="py-2.5 font-mono text-[10px]">
-                    {s.stripeCustomerId || '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {loading ? (
+            <SkeletonRows rows={6} cols={4} />
+          ) : (
+            <table className="w-full min-w-[640px] text-left text-xs">
+                <thead>
+                  <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)] uppercase">
+                    <th className="py-2">Customer</th>
+                    <th className="px-3 py-2">Plan</th>
+                    <th className="px-3 py-2">Billing</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="py-2">Stripe customer</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {(data?.subscriptions || []).map((s) => (
+                    <tr key={s.id}>
+                      <td className="py-2.5">
+                        <div className="font-semibold">{s.user.name || s.user.email}</div>
+                        <div className="text-[10px] text-[var(--muted)]">{s.user.email}</div>
+                      </td>
+                      <td className="px-3 py-2.5 font-bold text-teal-800">{s.plan}</td>
+                      <td className="px-3 py-2.5 capitalize">
+                        {'billingInterval' in s && s.billingInterval
+                          ? String(s.billingInterval)
+                          : 'month'}
+                      </td>
+                      <td className="px-3 py-2.5 uppercase">{s.status}</td>
+                      <td className="py-2.5 font-mono text-[10px]">
+                        {s.stripeCustomerId || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+            </table>
+          )}
         </div>
       )}
 
@@ -402,16 +512,20 @@ function Kpi({
   icon: Icon,
   label,
   value,
+  loading,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  value: string;
+  value?: string;
+  loading?: boolean;
 }) {
   return (
     <SpotlightCard className="flex justify-between p-5">
       <div>
         <div className="text-[10px] font-bold uppercase text-[var(--muted-foreground)]">{label}</div>
-        <div className="mt-1 text-2xl font-extrabold">{value}</div>
+        <div className="mt-1 text-2xl font-extrabold">
+          {loading || value == null ? <SkeletonValue /> : value}
+        </div>
       </div>
       <Icon className="h-5 w-5 text-teal-700" />
     </SpotlightCard>

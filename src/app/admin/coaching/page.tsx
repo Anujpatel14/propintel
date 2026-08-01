@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useMemo, useState, useTransition } from 'react';
-import { Loader2, Search, Filter } from 'lucide-react';
+import { Search, Filter } from 'lucide-react';
 import PageHeader from '@/components/dashboard/PageHeader';
+import { SkeletonRows } from '@/components/ui/Skeleton';
 import {
   getAdminCoachingSessions,
   updateAdminCoachingSession,
@@ -39,20 +40,17 @@ export default function AdminCoachingPage() {
   const [timeSlot, setTimeSlot] = useState('all');
 
   const load = async () => {
-    const result = await getAdminCoachingSessions();
-    setSessions(result.sessions);
+    setLoading(true);
+    try {
+      const result = await getAdminCoachingSessions();
+      setSessions(result.sessions);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    (async () => {
-      try {
-        await load();
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    load().catch(console.error);
   }, []);
 
   const people = useMemo(() => {
@@ -121,20 +119,6 @@ export default function AdminCoachingPage() {
     setTimeSlot('all');
   };
 
-  if (loading) {
-    return (
-      <div className="mx-auto max-w-7xl space-y-8">
-        <PageHeader
-          title="Coaching operations"
-          description="Filter, assign coaches, and manage investor sessions."
-        />
-        <div className="flex justify-center py-20 text-[var(--muted)]">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading coaching desk…
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <PageHeader
@@ -146,7 +130,7 @@ export default function AdminCoachingPage() {
         <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-[var(--muted)] uppercase">
           <Filter className="h-3.5 w-3.5 text-teal-700" /> Filters
           <span className="ml-auto font-semibold normal-case tracking-normal text-[var(--muted)]">
-            Showing {filtered.length} of {sessions.length}
+            {loading ? 'Loading…' : `Showing ${filtered.length} of ${sessions.length}`}
           </span>
         </div>
 
@@ -254,7 +238,11 @@ export default function AdminCoachingPage() {
       </div>
 
       <div className="max-h-[min(68vh,720px)] space-y-3 overflow-y-auto overscroll-contain pr-1">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="surface-card space-y-4 p-5">
+            <SkeletonRows rows={6} cols={3} />
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[var(--border)] py-14 text-center text-sm text-[var(--muted)]">
             No sessions match these filters.
           </div>

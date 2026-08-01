@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import PageHeader from '@/components/dashboard/PageHeader';
+import { SkeletonRows } from '@/components/ui/Skeleton';
 import {
   getCmsContent,
   upsertCmsContent,
@@ -129,8 +130,8 @@ export default function AdminCmsPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12 text-[var(--muted)]">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading…
+        <div className="surface-card space-y-4 p-5">
+          <SkeletonRows rows={6} cols={3} />
         </div>
       ) : (
         <div className="space-y-6">

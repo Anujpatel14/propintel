@@ -17,6 +17,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/admin/payments': 'Payments',
   '/admin/deals': 'Deal intelligence',
   '/admin/system/api-usage': 'API usage',
+  '/admin/system/ai-activity': 'AI activity',
   '/admin/coaching': 'Coaching admin',
   '/admin/cms': 'CMS',
   '/admin/logs': 'Logs',

@@ -3,6 +3,7 @@
 import { prisma, withDbRetry } from '@/lib/db';
 import { requireAuth } from '@/lib/services/auth';
 import { isStripeConfigured, refundPayment, getStripe } from '@/lib/services/stripe';
+import { sumMrr } from '@/lib/billingMetrics';
 import { revalidatePath } from 'next/cache';
 
 async function requireAdmin() {
@@ -14,49 +15,59 @@ async function requireAdmin() {
 export async function getAdminPaymentDashboard() {
   await requireAdmin();
 
-  const [orders, events, subscriptions, failedEvents, plans] = await Promise.all([
-    withDbRetry(() =>
-      prisma.order.findMany({
-        include: { user: { select: { email: true, name: true } } },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-      })
-    ),
-    withDbRetry(() =>
-      prisma.paymentEvent.findMany({
-        include: { user: { select: { email: true, name: true } } },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-      })
-    ),
-    withDbRetry(() =>
-      prisma.subscription.findMany({
-        include: { user: { select: { email: true, name: true, id: true } } },
-      })
-    ),
-    withDbRetry(() =>
-      prisma.paymentEvent.findMany({
-        where: { OR: [{ status: 'FAILED' }, { type: 'INVOICE_FAILED' }] },
-        include: { user: { select: { email: true, name: true } } },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      })
-    ),
-    withDbRetry(() => prisma.subscriptionPlan.findMany()),
-  ]);
+  const [orders, events, subscriptions, failedEvents, plans, failedOrderCount] =
+    await Promise.all([
+      withDbRetry(() =>
+        prisma.order.findMany({
+          include: { user: { select: { email: true, name: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        })
+      ),
+      withDbRetry(() =>
+        prisma.paymentEvent.findMany({
+          include: { user: { select: { email: true, name: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        })
+      ),
+      withDbRetry(() =>
+        prisma.subscription.findMany({
+          include: { user: { select: { email: true, name: true, id: true } } },
+          orderBy: { updatedAt: 'desc' },
+        })
+      ),
+      withDbRetry(() =>
+        prisma.paymentEvent.findMany({
+          where: { OR: [{ status: 'FAILED' }, { type: 'INVOICE_FAILED' }] },
+          include: { user: { select: { email: true, name: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        })
+      ),
+      withDbRetry(() => prisma.subscriptionPlan.findMany()),
+      withDbRetry(() => prisma.order.count({ where: { status: 'FAILED' } })),
+    ]);
 
-  const priceByCode = Object.fromEntries(plans.map((p) => [p.code, p.priceMonthly]));
   const paidOrders = orders.filter((o) => o.status === 'PAID' || o.status === 'COMPLETED');
   const refunded = orders.filter((o) => o.status === 'REFUNDED');
   const revenue = paidOrders.reduce((s, o) => s + o.amount, 0);
   const activePaid = subscriptions.filter((s) => s.status === 'ACTIVE' && s.plan !== 'FREE');
   const pastDue = subscriptions.filter((s) => s.status === 'PAST_DUE');
-  // Clean MRR: only ACTIVE paid (exclude past_due / dunning at-risk)
-  const mrr = activePaid.reduce((s, sub) => s + (priceByCode[sub.plan] || 0), 0);
-  const atRiskMrr = pastDue.reduce((s, sub) => s + (priceByCode[sub.plan] || 0), 0);
+  const mrr = sumMrr(activePaid, plans);
+  const atRiskMrr = sumMrr(pastDue, plans);
 
   const stripe = getStripe();
   let stripeBalance: { available: number; pending: number } | null = null;
+  let stripeInvoices: Array<{
+    id: string;
+    customerEmail: string | null;
+    amount: number;
+    status: string;
+    createdAt: string;
+    description: string;
+  }> = [];
+
   if (stripe) {
     try {
       const bal = await stripe.balance.retrieve();
@@ -68,6 +79,30 @@ export async function getAdminPaymentDashboard() {
       };
     } catch {
       stripeBalance = null;
+    }
+
+    try {
+      const invoices = await stripe.invoices.list({ limit: 40, expand: ['data.customer'] });
+      stripeInvoices = invoices.data.map((inv) => {
+        const customer = inv.customer;
+        let email: string | null = null;
+        if (customer && typeof customer === 'object' && !('deleted' in customer && customer.deleted)) {
+          email = customer.email ?? null;
+        }
+        return {
+          id: inv.id,
+          customerEmail: email || inv.customer_email || null,
+          amount: (inv.amount_paid || inv.total || 0) / 100,
+          status: inv.status || 'unknown',
+          createdAt: new Date((inv.created || 0) * 1000).toISOString(),
+          description:
+            inv.lines?.data?.[0]?.description ||
+            inv.description ||
+            `Invoice ${inv.number || inv.id}`,
+        };
+      });
+    } catch {
+      stripeInvoices = [];
     }
   }
 
@@ -82,6 +117,7 @@ export async function getAdminPaymentDashboard() {
       process.env.STRIPE_WEBHOOK_SECRET && !process.env.STRIPE_WEBHOOK_SECRET.includes('replace')
     ),
     stripeBalance,
+    stripeInvoices,
     metrics: {
       revenue,
       orderCount: orders.length,
@@ -89,7 +125,7 @@ export async function getAdminPaymentDashboard() {
       refundedAmount: refunded.reduce((s, o) => s + o.amount, 0),
       activePaid: activePaid.length,
       pastDueCount: pastDue.length,
-      failedCount: failedEvents.length,
+      failedCount: Math.max(failedEvents.length, failedOrderCount),
       mrr,
       atRiskMrr,
     },
@@ -109,7 +145,6 @@ export async function adminRefundOrder(orderId: string) {
   );
   if (!order) return { success: false as const, error: 'Order not found' };
   if (!order.stripePaymentId) {
-    // Local/dev order — mark refunded without Stripe
     await withDbRetry(() =>
       prisma.order.update({
         where: { id: orderId },
@@ -124,7 +159,7 @@ export async function adminRefundOrder(orderId: string) {
           status: 'OK',
           amount: order.amount,
           plan: order.plan,
-          description: `Local refund for order ${orderId}`,
+          description: `Refund for order ${orderId}`,
         },
       })
     );

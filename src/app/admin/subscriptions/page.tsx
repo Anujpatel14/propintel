@@ -1,27 +1,27 @@
 'use client';
 
-import React, { useEffect, useState, useTransition } from 'react';
+import React, { useEffect, useMemo, useState, useTransition } from 'react';
 import {
   Loader2,
-  DollarSign,
-  Users,
-  TrendingDown,
-  AlertTriangle,
   Plus,
   Pencil,
   Trash2,
   X,
   Check,
+  Search,
+  UserPlus,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SpotlightCard from '@/components/ui/SpotlightCard';
 import PageHeader from '@/components/dashboard/PageHeader';
+import { SkeletonRows, SkeletonValue } from '@/components/ui/Skeleton';
 import {
   getAdminPlansAndSubscribers,
   upsertSubscriptionPlan,
   deleteSubscriptionPlan,
   adminAssignUserPlan,
 } from '@/app/actions/planActions';
+import { getAdminUsers } from '@/app/actions/adminExpandActions';
 
 type Plan = {
   id: string;
@@ -37,19 +37,11 @@ type Plan = {
   stripePriceAnnual: string | null;
 };
 
-type SubRow = {
+type AssignUser = {
   id: string;
-  plan: string;
-  status: string;
-  user: { id: string; email: string; name: string | null };
-};
-
-type OrderRow = {
-  id: string;
-  amount: number;
-  plan: string;
-  status: string;
-  createdAt: Date | string;
+  email: string;
+  name: string | null;
+  subscription: { plan: string; status: string } | null;
 };
 
 const emptyForm = {
@@ -69,43 +61,59 @@ const emptyForm = {
 export default function AdminSubscriptionsPage() {
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [subscriptions, setSubscriptions] = useState<SubRow[]>([]);
-  const [orders, setOrders] = useState<OrderRow[]>([]);
-  const [metrics, setMetrics] = useState({
-    mrr: 0,
-    arr: 0,
-    totalSubscribers: 0,
-    totalUsers: 0,
-    failedPayments: 0,
-    churnRate: 0,
-  });
+  const [users, setUsers] = useState<AssignUser[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [assignUserId, setAssignUserId] = useState('');
   const [assignPlan, setAssignPlan] = useState('PRO');
+  const [userQuery, setUserQuery] = useState('');
+  const [assignNotice, setAssignNotice] = useState<string | null>(null);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState(false);
   const [, startTransition] = useTransition();
 
   const load = async () => {
-    const result = await getAdminPlansAndSubscribers();
-    setPlans(result.plans);
-    setSubscriptions(result.subscriptions);
-    setOrders(result.orders);
-    setMetrics(result.metrics);
-    if (result.plans[0] && !assignPlan) setAssignPlan(result.plans[0].code);
+    setLoading(true);
+    try {
+      const [planResult, userResult] = await Promise.all([
+        getAdminPlansAndSubscribers(),
+        getAdminUsers(),
+      ]);
+      setPlans(planResult.plans);
+      setUsers(
+        userResult.users.map((u) => ({
+          id: u.id,
+          email: u.email,
+          name: u.name,
+          subscription: u.subscription
+            ? { plan: u.subscription.plan, status: u.subscription.status }
+            : null,
+        }))
+      );
+      const firstActive = planResult.plans.find((p) => p.isActive);
+      if (firstActive) setAssignPlan((prev) => prev || firstActive.code);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    (async () => {
-      try {
-        await load();
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    load().catch(console.error);
   }, []);
+
+  const filteredUsers = useMemo(() => {
+    const q = userQuery.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter(
+      (u) =>
+        u.email.toLowerCase().includes(q) ||
+        (u.name || '').toLowerCase().includes(q) ||
+        (u.subscription?.plan || '').toLowerCase().includes(q)
+    );
+  }, [users, userQuery]);
+
+  const selectedUser = users.find((u) => u.id === assignUserId) || null;
 
   const openCreate = () => {
     setForm({
@@ -167,38 +175,37 @@ export default function AdminSubscriptionsPage() {
 
   const handleAssign = () => {
     if (!assignUserId || !assignPlan) return;
+    setAssignNotice(null);
+    setAssignError(null);
+    setAssigning(true);
     startTransition(async () => {
-      await adminAssignUserPlan(assignUserId, assignPlan, 'ACTIVE');
-      await load();
+      try {
+        const res = await adminAssignUserPlan(assignUserId, assignPlan, 'ACTIVE');
+        if (!res.success) {
+          setAssignError(res.error || 'Could not assign plan');
+        } else {
+          const label = selectedUser?.name || selectedUser?.email || 'User';
+          setAssignNotice(`Assigned ${assignPlan} to ${label}.`);
+          setAssignUserId('');
+          setUserQuery('');
+          await load();
+        }
+      } catch (e) {
+        setAssignError(e instanceof Error ? e.message : 'Assign failed');
+      } finally {
+        setAssigning(false);
+      }
     });
   };
 
-  const cards = [
-    { label: 'MRR', value: `$${metrics.mrr.toLocaleString()}`, icon: DollarSign },
-    { label: 'ARR', value: `$${metrics.arr.toLocaleString()}`, icon: DollarSign },
-    { label: 'Paid subscribers', value: String(metrics.totalSubscribers), icon: Users },
-    { label: 'Failed payments', value: String(metrics.failedPayments), icon: AlertTriangle },
-  ];
-
-  if (loading) {
-    return (
-      <div className="mx-auto max-w-7xl space-y-8">
-        <PageHeader
-          title="Subscriptions & plans"
-          description="Manage plan catalog, assign tiers, and review revenue."
-        />
-        <div className="flex justify-center py-20 text-[var(--muted)]">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading…
-        </div>
-      </div>
-    );
-  }
+  const activePlans = plans.filter((p) => p.isActive).length;
+  const paidPlans = plans.filter((p) => p.isActive && p.priceMonthly > 0).length;
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <PageHeader
         title="Subscriptions & plans"
-        description="Create and edit plans, assign users, and track orders."
+        description="Manage the plan catalog and assign a plan to any user."
         actions={
           <button
             type="button"
@@ -210,51 +217,93 @@ export default function AdminSubscriptionsPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((c) => {
-          const Icon = c.icon;
-          return (
-            <SpotlightCard key={c.label} className="flex justify-between p-5">
-              <div>
-                <div className="text-[10px] font-bold uppercase text-[var(--muted-foreground)]">
-                  {c.label}
-                </div>
-                <div className="mt-1 text-2xl font-extrabold">{c.value}</div>
-              </div>
-              <Icon className="h-5 w-5 text-teal-700" />
-            </SpotlightCard>
-          );
-        })}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <SpotlightCard className="p-5">
+          <div className="text-[10px] font-bold uppercase text-[var(--muted-foreground)]">
+            Plans in catalog
+          </div>
+          <div className="mt-1 text-2xl font-extrabold">
+            {loading ? <SkeletonValue /> : plans.length}
+          </div>
+        </SpotlightCard>
+        <SpotlightCard className="p-5">
+          <div className="text-[10px] font-bold uppercase text-[var(--muted-foreground)]">
+            Active plans
+          </div>
+          <div className="mt-1 text-2xl font-extrabold">
+            {loading ? <SkeletonValue /> : activePlans}
+          </div>
+        </SpotlightCard>
+        <SpotlightCard className="p-5">
+          <div className="text-[10px] font-bold uppercase text-[var(--muted-foreground)]">
+            Paid tiers
+          </div>
+          <div className="mt-1 text-2xl font-extrabold">
+            {loading ? <SkeletonValue /> : paidPlans}
+          </div>
+        </SpotlightCard>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <SpotlightCard className="p-5">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase text-[var(--muted)]">
-            <TrendingDown className="h-4 w-4" /> Churn signal
+      <SpotlightCard className="space-y-4 p-5 sm:p-6">
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-teal-700/10 p-2.5 text-teal-800">
+            <UserPlus className="h-4 w-4" />
           </div>
-          <div className="mt-2 text-3xl font-extrabold">{metrics.churnRate}%</div>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            Canceled subscriptions vs total subscription rows
-          </p>
-        </SpotlightCard>
+          <div>
+            <h2 className="text-sm font-bold">Assign plan to user</h2>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">
+              Search any account, pick a plan, and apply it immediately.
+            </p>
+          </div>
+        </div>
 
-        <SpotlightCard className="space-y-3 p-5">
-          <div className="text-xs font-bold uppercase text-[var(--muted)]">Assign plan to user</div>
-          <select
-            className="glass-input w-full bg-white px-3 py-2.5 text-xs"
-            value={assignUserId}
-            onChange={(e) => setAssignUserId(e.target.value)}
+        {(assignNotice || assignError) && (
+          <div
+            className={`rounded-xl px-3 py-2 text-xs ${
+              assignError
+                ? 'border border-red-200 bg-red-50 text-red-800'
+                : 'border border-teal-700/20 bg-teal-700/10 text-teal-900'
+            }`}
           >
-            <option value="">Select subscriber…</option>
-            {subscriptions.map((s) => (
-              <option key={s.user.id} value={s.user.id}>
-                {s.user.name || s.user.email} ({s.plan})
-              </option>
-            ))}
-          </select>
-          <div className="flex flex-col gap-2 sm:flex-row">
+            {assignError || assignNotice}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 lg:items-end">
+          <label className="relative space-y-1.5 text-[10px] font-bold uppercase text-[var(--muted)] lg:col-span-4">
+            Search users
+            <span className="relative block">
+              <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" />
+              <input
+                className="glass-input w-full bg-white py-2.5 pr-3 pl-9 text-xs font-normal normal-case"
+                placeholder="Name, email, or current plan…"
+                value={userQuery}
+                onChange={(e) => setUserQuery(e.target.value)}
+              />
+            </span>
+          </label>
+
+          <label className="space-y-1.5 text-[10px] font-bold uppercase text-[var(--muted)] lg:col-span-4">
+            User
             <select
-              className="glass-input flex-1 bg-white px-3 py-2.5 text-xs"
+              className="glass-input w-full bg-white px-3 py-2.5 text-xs font-normal normal-case"
+              value={assignUserId}
+              onChange={(e) => setAssignUserId(e.target.value)}
+            >
+              <option value="">Select user…</option>
+              {filteredUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {(u.name || u.email) +
+                    (u.subscription ? ` · ${u.subscription.plan}` : ' · no plan')}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-1.5 text-[10px] font-bold uppercase text-[var(--muted)] lg:col-span-2">
+            Plan
+            <select
+              className="glass-input w-full bg-white px-3 py-2.5 text-xs font-normal normal-case"
               value={assignPlan}
               onChange={(e) => setAssignPlan(e.target.value)}
             >
@@ -266,154 +315,116 @@ export default function AdminSubscriptionsPage() {
                   </option>
                 ))}
             </select>
-            <button
-              type="button"
-              onClick={handleAssign}
-              disabled={!assignUserId}
-              className="btn-primary cursor-pointer px-4 py-2.5 text-xs disabled:opacity-50"
-            >
-              Assign
-            </button>
-          </div>
-        </SpotlightCard>
-      </div>
+          </label>
 
-      {/* Plan catalog */}
+          <button
+            type="button"
+            onClick={handleAssign}
+            disabled={!assignUserId || assigning}
+            className="btn-primary inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 px-4 py-2.5 text-xs disabled:opacity-50 lg:col-span-2"
+          >
+            {assigning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Assign
+          </button>
+        </div>
+
+        {selectedUser && (
+          <p className="text-[11px] text-[var(--muted)]">
+            Selected:{' '}
+            <span className="font-semibold text-foreground">
+              {selectedUser.name || selectedUser.email}
+            </span>
+            {' · '}
+            current plan{' '}
+            <span className="font-semibold text-teal-800">
+              {selectedUser.subscription?.plan || 'none'}
+            </span>
+            {selectedUser.subscription?.status
+              ? ` (${selectedUser.subscription.status.toLowerCase()})`
+              : ''}
+          </p>
+        )}
+      </SpotlightCard>
+
       <div className="space-y-4">
         <h2 className="text-sm font-bold">Plan catalog</h2>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {plans.map((p) => (
-            <div
-              key={p.id}
-              className={`surface-card flex flex-col justify-between p-5 ${!p.isActive ? 'opacity-60' : ''}`}
-            >
-              <div className="space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="text-[10px] font-bold tracking-wider text-teal-800 uppercase">
-                      {p.code}
-                      {!p.isActive ? ' · inactive' : ''}
+        {loading && plans.length === 0 ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="surface-card space-y-3 p-5">
+                <SkeletonValue className="h-4 w-16" />
+                <SkeletonValue className="h-5 w-32" />
+                <SkeletonRows rows={3} cols={1} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {plans.map((p) => (
+              <div
+                key={p.id}
+                className={`surface-card flex flex-col justify-between p-5 ${!p.isActive ? 'opacity-60' : ''}`}
+              >
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-[10px] font-bold tracking-wider text-teal-800 uppercase">
+                        {p.code}
+                        {!p.isActive ? ' · inactive' : ''}
+                      </div>
+                      <h3 className="text-base font-bold">{p.name}</h3>
                     </div>
-                    <h3 className="text-base font-bold">{p.name}</h3>
+                    <div className="text-right">
+                      <div className="text-lg font-extrabold">${p.priceMonthly}</div>
+                      <div className="text-[10px] text-[var(--muted)]">/ month</div>
+                      {p.priceAnnual != null && p.priceAnnual > 0 ? (
+                        <div className="text-[10px] text-[var(--muted)]">
+                          ${p.priceAnnual}/yr
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-lg font-extrabold">${p.priceMonthly}</div>
-                    <div className="text-[10px] text-[var(--muted)]">/ month</div>
-                  </div>
-                </div>
-                {p.blurb ? <p className="text-xs text-[var(--muted)]">{p.blurb}</p> : null}
-                {p.features ? (
-                  <ul className="space-y-1 text-[11px] text-[var(--muted)]">
-                    {p.features.split('\n').filter(Boolean).map((f) => (
-                      <li key={f} className="flex items-start gap-1.5">
-                        <Check className="mt-0.5 h-3 w-3 shrink-0 text-teal-700" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-              <div className="mt-4 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => openEdit(p)}
-                  className="inline-flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] text-xs font-semibold hover:bg-white"
-                >
-                  <Pencil className="h-3.5 w-3.5" /> Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(p.id)}
-                  className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-red-200 px-3 text-xs font-semibold text-red-700 hover:bg-red-50"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  {['FREE', 'PRO', 'ENTERPRISE'].includes(p.code) ? 'Disable' : 'Delete'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="surface-card overflow-x-auto p-5">
-        <h2 className="mb-4 text-sm font-bold">Subscriber roster</h2>
-        {subscriptions.length === 0 ? (
-          <p className="text-xs text-[var(--muted)]">No subscriptions yet.</p>
-        ) : (
-          <table className="w-full min-w-[560px] text-left text-xs">
-            <thead>
-              <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)] uppercase">
-                <th className="py-2">User</th>
-                <th className="px-3 py-2">Plan</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="py-2">Quick change</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)]">
-              {subscriptions.map((s) => (
-                <tr key={s.id}>
-                  <td className="py-2.5">
-                    <div className="font-semibold">{s.user.name || s.user.email}</div>
-                    <div className="text-[10px] text-[var(--muted)]">{s.user.email}</div>
-                  </td>
-                  <td className="px-3 py-2.5 font-bold text-teal-800">{s.plan}</td>
-                  <td className="px-3 py-2.5 uppercase">{s.status}</td>
-                  <td className="py-2.5">
-                    <select
-                      className="glass-input min-h-10 bg-white px-2 py-1.5 text-[11px]"
-                      value={s.plan}
-                      onChange={(e) => {
-                        startTransition(async () => {
-                          await adminAssignUserPlan(s.user.id, e.target.value, 'ACTIVE');
-                          await load();
-                        });
-                      }}
-                    >
-                      {plans
-                        .filter((p) => p.isActive || p.code === s.plan)
-                        .map((p) => (
-                          <option key={p.id} value={p.code}>
-                            {p.code}
-                          </option>
+                  {p.blurb ? <p className="text-xs text-[var(--muted)]">{p.blurb}</p> : null}
+                  {p.features ? (
+                    <ul className="space-y-1 text-[11px] text-[var(--muted)]">
+                      {p.features
+                        .split('\n')
+                        .filter(Boolean)
+                        .map((f) => (
+                          <li key={f} className="flex items-start gap-1.5">
+                            <Check className="mt-0.5 h-3 w-3 shrink-0 text-teal-700" />
+                            {f}
+                          </li>
                         ))}
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="surface-card overflow-x-auto p-5">
-        <h2 className="mb-4 text-sm font-bold">All orders & transactions</h2>
-        {orders.length === 0 ? (
-          <p className="text-xs text-[var(--muted)]">No orders recorded yet.</p>
-        ) : (
-          <table className="w-full min-w-[520px] text-left text-xs">
-            <thead>
-              <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)] uppercase">
-                <th className="py-2">Txn</th>
-                <th className="px-3 py-2">Plan</th>
-                <th className="px-3 py-2">Amount</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="py-2">Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)]">
-              {orders.map((o) => (
-                <tr key={o.id}>
-                  <td className="py-2.5 font-mono text-[10px]">{o.id.slice(0, 8)}</td>
-                  <td className="px-3 py-2.5">{o.plan}</td>
-                  <td className="px-3 py-2.5 font-bold text-teal-800">${o.amount.toFixed(2)}</td>
-                  <td className="px-3 py-2.5 uppercase">{o.status}</td>
-                  <td className="py-2.5 text-[var(--muted)]">
-                    {new Date(o.createdAt).toLocaleString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </ul>
+                  ) : null}
+                  {(p.stripePriceMonthly || p.stripePriceAnnual) && (
+                    <div className="space-y-0.5 pt-1 font-mono text-[10px] text-[var(--muted)]">
+                      {p.stripePriceMonthly ? <div>mo: {p.stripePriceMonthly}</div> : null}
+                      {p.stripePriceAnnual ? <div>yr: {p.stripePriceAnnual}</div> : null}
+                    </div>
+                  )}
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(p)}
+                    className="inline-flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] text-xs font-semibold hover:bg-white"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(p.id)}
+                    className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-red-200 px-3 text-xs font-semibold text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {['FREE', 'PRO', 'ENTERPRISE'].includes(p.code) ? 'Disable' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -449,7 +460,9 @@ export default function AdminSubscriptionsPage() {
                     Code
                     <input
                       required
-                      disabled={Boolean(form.id && ['FREE', 'PRO', 'ENTERPRISE'].includes(form.code))}
+                      disabled={Boolean(
+                        form.id && ['FREE', 'PRO', 'ENTERPRISE'].includes(form.code)
+                      )}
                       className="glass-input w-full px-3 py-2 text-sm disabled:opacity-60"
                       value={form.code}
                       onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}

@@ -326,8 +326,8 @@ export default function CoachingPortalPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <PageHeader
-        title="Investor coaching desk"
-        description="Book 1-on-1 strategizing sessions with master real estate underwriters."
+        title="Coaching"
+        description="Book one-on-one sessions with experienced real estate advisors."
       />
 
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">

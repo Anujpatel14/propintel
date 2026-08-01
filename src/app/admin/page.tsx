@@ -25,7 +25,6 @@ export default async function AdminPage() {
   const metricsResult = await getAdminDashboardMetrics();
   const metrics = metricsResult.metrics;
   const recentLogs = metricsResult.recentLogs;
-  const estimatedMrr = metrics.activeSubscribers * 49;
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
@@ -38,9 +37,9 @@ export default async function AdminPage() {
         <SpotlightCard className="flex justify-between p-5">
           <div>
             <div className="text-[10px] font-bold uppercase text-[var(--muted-foreground)]">
-              Est. MRR
+              MRR
             </div>
-            <div className="text-2xl font-extrabold">${estimatedMrr.toLocaleString()}</div>
+            <div className="text-2xl font-extrabold">${metrics.mrr.toLocaleString()}</div>
           </div>
           <DollarSign className="h-5 w-5 text-teal-700" />
         </SpotlightCard>

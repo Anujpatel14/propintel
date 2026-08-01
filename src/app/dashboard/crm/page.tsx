@@ -91,7 +91,7 @@ export default function CRMPipelinePage() {
     } catch (e) {
       console.error(e);
       const message =
-        e instanceof Error ? e.message : 'Failed to load pipeline from the database.';
+        e instanceof Error ? e.message : 'Couldn’t load your pipeline. Please try again.';
       setLoadError(message);
     } finally {
       setIsLoading(false);
@@ -165,8 +165,8 @@ export default function CRMPipelinePage() {
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <PageHeader
-        title="Deal CRM pipeline"
-        description="Track purchase prospects, manage follow-up timers, and log assignment revenue."
+        title="Deal pipeline"
+        description="Track prospects, follow-ups, and assignment revenue."
         actions={
           <button
             onClick={() => setIsModalOpen(true)}

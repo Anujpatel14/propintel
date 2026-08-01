@@ -33,6 +33,7 @@ model User {
   activities        ActivityLog[]
   orders            Order[]
   paymentEvents     PaymentEvent[]
+  aiDealAnalyses    AiDealAnalysis[]
 }
 
 model Profile {
@@ -51,15 +52,18 @@ model Profile {
 }
 
 model Subscription {
-  id                   String   @id @default(uuid())
-  userId               String   @unique
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String    @id @default(uuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   stripeCustomerId     String?
   stripeSubscriptionId String?
-  plan                 String   @default("FREE") // matches SubscriptionPlan.code
-  status               String   @default("INACTIVE") // e.g., "ACTIVE", "PAST_DUE", "CANCELED"
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  plan                 String    @default("FREE") // matches SubscriptionPlan.code
+  status               String    @default("INACTIVE") // ACTIVE, PAST_DUE, CANCELED, TRIALING
+  billingInterval      String    @default("month") // month | year
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }
 
 model SubscriptionPlan {
@@ -169,6 +173,10 @@ model PropertyAnalysis {
   capRate         Float?
   dscr            Float?
   cashOnCash      Float?
+  strategyType    String   @default("hold") // hold | rental
+  aiVerdict       String?
+  aiHeadline      String?
+  aiPayloadJson   String? // summary, strengths, risks, provider, reportText
   createdAt       DateTime @default(now())
 }
 
@@ -186,6 +194,9 @@ model FlipAnalysis {
   profit        Float?
   roi           Float?
   mao           Float?
+  aiVerdict     String?
+  aiHeadline    String?
+  aiPayloadJson String?
   createdAt     DateTime @default(now())
 }
 
@@ -247,4 +258,25 @@ model ActivityLog {
 
   @@index([createdAt])
   @@index([userId, action])
+}
+
+/** Saved AI / rule-engine underwriting verdicts for the deal analyzer */
+model AiDealAnalysis {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address         String
+  modelType       String   @default("hold") // hold | flip | rental
+  provider        String // openrouter | rules
+  modelName       String?
+  verdict         String // STRONG BUY | ACQUIRE WITH CAUTION | PASS OR RE-NEGOTIATE
+  headline        String?
+  summaryJson     String // JSON: { label, value }[]
+  strengthsJson   String // JSON: { title, detail }[]
+  risksJson       String // JSON: { title, detail }[]
+  metricsJson     String // JSON snapshot of inputs/outputs used
+  reportMarkdown  String? // plain text for PDF / export
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
 }

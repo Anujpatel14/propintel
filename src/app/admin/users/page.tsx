@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useEffect, useState, useTransition } from 'react';
-import { CheckCircle, XCircle, ArrowRightLeft, Loader2, Search, UserX, UserCheck } from 'lucide-react';
+import { CheckCircle, XCircle, ArrowRightLeft, Search, UserX, UserCheck } from 'lucide-react';
 import { updateUserRole } from '@/app/actions/adminActions';
 import { getAdminUsers, updateUserStatus } from '@/app/actions/adminExpandActions';
 import PageHeader from '@/components/dashboard/PageHeader';
+import { SkeletonRows } from '@/components/ui/Skeleton';
 import type { Role } from '@prisma/client';
 
 interface UserRow {
@@ -147,8 +148,18 @@ export default function AdminUsersPage() {
 
       <div className="surface-card overflow-x-auto p-4">
         {loading ? (
-          <div className="flex justify-center py-12 text-[var(--muted)]">
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading…
+          <div className="space-y-4 py-2">
+            <div className="flex gap-3 border-b border-[var(--border)] pb-3">
+              {['User', 'Role', 'Plan', 'Status', 'Deals', 'Joined', 'Actions'].map((h) => (
+                <span
+                  key={h}
+                  className="text-[10px] font-bold uppercase text-[var(--muted-foreground)]"
+                >
+                  {h}
+                </span>
+              ))}
+            </div>
+            <SkeletonRows rows={8} cols={5} />
           </div>
         ) : (
           <table className="w-full min-w-[720px] text-left text-xs">

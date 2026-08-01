@@ -104,8 +104,8 @@ export default function CompareDealsPage() {
     return (
       <div className="mx-auto max-w-7xl space-y-8">
         <PageHeader
-          title="Deal comparison matrix"
-          description="Compare up to 4 saved analyses side-by-side. Best metrics highlight in green."
+          title="Compare deals"
+          description="Compare up to 4 saved analyses side-by-side. Stronger metrics highlight automatically."
         />
         <div className="flex items-center justify-center py-20 text-[var(--muted)]">
           <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading deals…
@@ -117,8 +117,8 @@ export default function CompareDealsPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <PageHeader
-        title="Deal comparison matrix"
-        description="Compare up to 4 saved analyses side-by-side. Best metrics highlight in green."
+        title="Compare deals"
+        description="Compare up to 4 saved analyses side-by-side. Stronger metrics highlight automatically."
       />
 
       {deals.length === 0 ? (

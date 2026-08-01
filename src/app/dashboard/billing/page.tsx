@@ -1,34 +1,33 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { ExternalLink, Loader2, CreditCard, ShieldCheck, AlertTriangle } from 'lucide-react';
-import SpotlightCard from '@/components/ui/SpotlightCard';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Check, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
 import PageHeader from '@/components/dashboard/PageHeader';
 import {
   switchUserPlan,
   getUserSubscriptionDetails,
   openBillingPortal,
+  confirmCheckoutAction,
 } from '@/app/actions/billingActions';
 import { getUserOrders } from '@/app/actions/orderActions';
 
-const FALLBACK_META: Record<string, { label: string; price: string; blurb: string }> = {
-  FREE: {
-    label: 'Free Starter',
-    price: '$0',
-    blurb: 'Limits property analysis archives to 3 saved deals.',
-  },
-  PRO: {
-    label: 'Professional (PRO)',
-    price: '$49',
-    blurb: 'Unlimited property lookups, AI deal reports, and CRM pipeline access.',
-  },
-  ENTERPRISE: {
-    label: 'Enterprise',
-    price: '$99',
-    blurb: 'Multi-agent accounts, custom report branding, and API endpoints.',
-  },
-};
+/** Keep payment history readable — never show internal sync/debug copy. */
+function formatPaymentDescription(description: string | null | undefined, plan: string) {
+  const raw = (description || '').trim();
+  if (!raw) return `${plan} plan`;
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes('sync bug') ||
+    lower.includes('repaired') ||
+    lower.includes('webhook') ||
+    lower.includes('checkout sync') ||
+    lower.includes('fallback')
+  ) {
+    return `${plan} plan subscription`;
+  }
+  return raw;
+}
 
 type CatalogPlan = {
   id: string;
@@ -50,20 +49,27 @@ interface OrderRow {
 }
 
 function BillingPageInner() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [currentPlan, setCurrentPlan] = useState('FREE');
   const [status, setStatus] = useState('INACTIVE');
   const [catalog, setCatalog] = useState<CatalogPlan[]>([]);
   const [stripeConfigured, setStripeConfigured] = useState(false);
   const [hasStripeCustomer, setHasStripeCustomer] = useState(false);
-  const [isLoadingPlan, setIsLoadingPlan] = useState(true);
-  const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [switching, setSwitching] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month');
+  const [currentBillingInterval, setCurrentBillingInterval] = useState<'month' | 'year'>('month');
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeTone, setNoticeTone] = useState<'ok' | 'warn'>('ok');
   const [error, setError] = useState<string | null>(null);
+  const [currentPeriodEnd, setCurrentPeriodEnd] = useState<string | null>(null);
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
 
-  const refresh = async () => {
+  const applyDetails = async () => {
     const [details, orderResult] = await Promise.all([
       getUserSubscriptionDetails(),
       getUserOrders(),
@@ -73,35 +79,95 @@ function BillingPageInner() {
     setCatalog(details.plans || []);
     setStripeConfigured(details.stripeConfigured);
     setHasStripeCustomer(details.hasStripeCustomer);
+    setCurrentPeriodEnd(details.currentPeriodEnd);
+    setCancelAtPeriodEnd(Boolean(details.cancelAtPeriodEnd));
+    const iv = details.billingInterval === 'year' ? 'year' : 'month';
+    setCurrentBillingInterval(iv);
+    setBillingInterval(iv);
     if (orderResult.success) setOrders(orderResult.orders);
+    return details;
   };
 
   useEffect(() => {
     const checkout = searchParams.get('checkout');
-    if (checkout === 'success') {
-      setNotice('Payment successful. Your plan will update once Stripe confirms the subscription.');
-    } else if (checkout === 'canceled') {
-      setNotice('Checkout was canceled. No charge was made.');
-    }
+    const sessionId = searchParams.get('session_id');
+    const planHint = searchParams.get('plan');
 
     (async () => {
       try {
-        await refresh();
+        if (checkout === 'canceled') {
+          setNoticeTone('warn');
+          setNotice('Checkout canceled — nothing was charged.');
+          await applyDetails();
+          return;
+        }
+
+        if (checkout === 'success') {
+          setConfirming(true);
+          setNoticeTone('ok');
+          setNotice('Payment received. Confirming your plan…');
+
+          // Try webhook race first, then Stripe API fallback (up to ~12s)
+          let confirmed = false;
+          for (let attempt = 0; attempt < 4; attempt++) {
+            const result = await confirmCheckoutAction({
+              sessionId,
+              planHint,
+            });
+            if (result.synced && result.plan !== 'FREE' && result.status === 'ACTIVE') {
+              setCurrentPlan(result.plan);
+              setStatus(result.status);
+              setHasStripeCustomer(true);
+              if (result.webhookSeen) {
+                setNotice(`You’re on the ${result.plan} plan. Your payment is confirmed.`);
+              } else if (result.source === 'checkout_session' || result.source === 'customer_subscription') {
+                setNotice(`You’re on the ${result.plan} plan. Your payment is confirmed.`);
+              } else {
+                setNotice(`You’re on the ${result.plan} plan.`);
+              }
+              confirmed = true;
+              break;
+            }
+            if (attempt < 3) await new Promise((r) => setTimeout(r, 2500));
+          }
+
+          await applyDetails();
+
+          if (!confirmed) {
+            setNoticeTone('warn');
+            setNotice(
+              'Payment went through, but your plan hasn’t updated yet. Tap “Refresh plan” in a moment, or contact support if it still looks wrong.'
+            );
+          }
+
+          // Clean success query params so refresh doesn’t re-run the loop forever
+          router.replace('/dashboard/billing');
+          return;
+        }
+
+        await applyDetails();
       } catch (e) {
         console.error(e);
+        setError('Could not load billing details.');
       } finally {
-        setIsLoadingPlan(false);
+        setConfirming(false);
+        setLoading(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   const handleSwitchPlan = async (planName: string) => {
-    if (planName === currentPlan) return;
-    setIsLoading(planName);
+    const samePlanAndInterval =
+      planName === currentPlan &&
+      status === 'ACTIVE' &&
+      billingInterval === currentBillingInterval;
+    if (samePlanAndInterval) return;
+    setSwitching(planName);
     setError(null);
     setNotice(null);
     try {
-      const result = await switchUserPlan(planName);
+      const result = await switchUserPlan(planName, billingInterval);
       if (!result.success) {
         setError(result.error || 'Could not change plan');
         return;
@@ -111,19 +177,48 @@ function BillingPageInner() {
         return;
       }
       if ('warning' in result && result.warning) {
+        setNoticeTone('warn');
         setNotice(result.warning);
+      }
+      if ('notice' in result && result.notice) {
+        setNoticeTone('ok');
+        setNotice(result.notice);
       }
       if (result.subscription) {
         setCurrentPlan(result.subscription.plan);
         setStatus(result.subscription.status);
+        const iv =
+          result.subscription.billingInterval === 'year' ? 'year' : 'month';
+        setCurrentBillingInterval(iv);
+        setBillingInterval(iv);
       }
-      const orderResult = await getUserOrders();
-      if (orderResult.success) setOrders(orderResult.orders);
-    } catch (e) {
-      console.error(e);
+      await applyDetails();
+    } catch {
       setError('Something went wrong switching plans.');
     } finally {
-      setIsLoading(null);
+      setSwitching(null);
+    }
+  };
+
+  const handleRefreshPlan = async () => {
+    setConfirming(true);
+    setError(null);
+    try {
+      const result = await confirmCheckoutAction({
+        planHint: currentPlan !== 'FREE' ? currentPlan : 'PRO',
+      });
+      await applyDetails();
+      if (result.synced && result.status === 'ACTIVE' && result.plan !== 'FREE') {
+        setNoticeTone('ok');
+        setNotice(`Your plan is ${result.plan}.`);
+      } else {
+        setNoticeTone('warn');
+        setNotice('No active paid subscription found yet. If you just paid, wait a moment and refresh again.');
+      }
+    } catch {
+      setError('Could not refresh plan from Stripe.');
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -144,231 +239,274 @@ function BillingPageInner() {
     }
   };
 
-  const currentCatalog = catalog.find((p) => p.code === currentPlan);
-  const meta = currentCatalog
-    ? {
-        label: currentCatalog.name,
-        price: `$${currentCatalog.priceMonthly}`,
-        blurb: currentCatalog.blurb || '',
-      }
-    : FALLBACK_META[currentPlan] || FALLBACK_META.FREE;
-
-  const otherPlans = catalog.filter((p) => p.code !== currentPlan);
+  const current = catalog.find((p) => p.code === currentPlan);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="mx-auto max-w-3xl space-y-8">
       <PageHeader
-        title="Billing & subscriptions"
-        description="Manage plan tiers, pay securely with Stripe, and review invoices."
+        title="Billing"
+        description="Your plan, upgrades, and recent payments."
       />
 
       {notice && (
-        <div className="rounded-xl border border-teal-700/20 bg-teal-700/10 px-4 py-3 text-xs text-teal-800">
-          {notice}
+        <div
+          className={`rounded-xl px-4 py-3 text-sm ${
+            noticeTone === 'ok'
+              ? 'border border-teal-700/20 bg-teal-50 text-teal-900'
+              : 'border border-amber-200 bg-amber-50 text-amber-950'
+          }`}
+        >
+          {confirming ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> {notice}
+            </span>
+          ) : (
+            notice
+          )}
         </div>
       )}
       {error && (
-        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
-        <div className="space-y-6 lg:col-span-8">
-          <div className="glass-panel flex flex-col items-start justify-between gap-6 rounded-2xl border border-teal-700/20 bg-teal-700/5 p-6 md:flex-row md:items-center">
-            {isLoadingPlan ? (
-              <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading subscription…
-              </div>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-teal-700/20 px-2.5 py-0.5 text-[10px] font-extrabold text-teal-800 uppercase">
-                      {status}
-                    </span>
-                    <span className="text-xs font-semibold text-[var(--muted-foreground)]">
-                      Monthly billing cycle
-                    </span>
-                  </div>
-                  <h3 className="text-lg font-bold text-foreground">Current plan: {meta.label}</h3>
-                  <p className="text-xs text-[var(--muted)]">{meta.blurb}</p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-3xl font-extrabold text-foreground">
-                    {meta.price}
-                    <span className="text-xs font-normal text-[var(--muted-foreground)]">/mo</span>
-                  </div>
-                </div>
-              </>
-            )}
+      {/* Current plan */}
+      <section className="rounded-2xl border border-[var(--border)] bg-white p-6">
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
           </div>
-
-          <div className="space-y-4">
-            <h3 className="text-sm font-bold text-foreground">Upgrade or Change Plan</h3>
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              {otherPlans.map((p) => {
-                const isFree = p.code === 'FREE' || p.priceMonthly === 0;
-                const isDark = p.code === 'ENTERPRISE';
-                return (
-                  <SpotlightCard
-                    key={p.id}
-                    className="flex min-h-52 flex-col justify-between border-[var(--border)] bg-white p-5"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex justify-between gap-2">
-                        <span
-                          className={`text-xs font-bold ${isFree ? 'text-[var(--muted)]' : 'text-teal-800'}`}
-                        >
-                          {p.name}
-                        </span>
-                        <span className="text-xs font-bold">${p.priceMonthly}/mo</span>
-                      </div>
-                      <p className="text-[11px] text-[var(--muted)]">
-                        {p.blurb || 'Subscription plan managed by PropIntel admin.'}
-                      </p>
-                      {!isFree && stripeConfigured && (
-                        <p className="text-[10px] font-semibold text-teal-800">
-                          Secured by Stripe Checkout
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleSwitchPlan(p.code)}
-                      disabled={isLoading !== null}
-                      className={
-                        isFree
-                          ? 'flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] py-2.5 text-xs font-bold text-[var(--muted)] disabled:opacity-50'
-                          : `${isDark ? 'btn-ink' : 'btn-primary'} flex w-full cursor-pointer items-center justify-center gap-2 py-2.5 text-xs disabled:opacity-50`
-                      }
-                    >
-                      {isLoading === p.code ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : isFree ? (
-                        'Downgrade to Free'
-                      ) : stripeConfigured ? (
-                        `Subscribe to ${p.name}`
-                      ) : (
-                        `Switch to ${p.name}`
-                      )}
-                    </button>
-                  </SpotlightCard>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="surface-card p-6">
-            <h3 className="mb-4 text-sm font-bold">Order & invoice history</h3>
-            {orders.length === 0 ? (
-              <p className="text-xs text-[var(--muted)]">
-                No invoices yet. Plan changes and Stripe payments appear here automatically.
+        ) : (
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--muted)]">
+                Current plan
               </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)] uppercase">
-                      <th className="py-2 pr-3">Invoice</th>
-                      <th className="px-3 py-2">Date</th>
-                      <th className="px-3 py-2">Description</th>
-                      <th className="px-3 py-2">Amount</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="py-2 pl-3 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--border)]">
-                    {orders.map((o) => (
-                      <tr key={o.id}>
-                        <td className="py-3 pr-3 font-semibold">
-                          {o.stripeInvoiceId || o.id.slice(0, 8)}
-                        </td>
-                        <td className="px-3 py-3 text-[var(--muted)]">
-                          {new Date(o.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-3 py-3">{o.description || `${o.plan} Plan`}</td>
-                        <td className="px-3 py-3 font-bold text-teal-800">
-                          ${o.amount.toFixed(2)}
-                        </td>
-                        <td className="px-3 py-3">
-                          <span className="rounded bg-teal-700/10 px-1.5 py-0.5 text-[9px] font-extrabold text-teal-800 uppercase">
-                            {o.status}
-                          </span>
-                        </td>
-                        <td className="py-3 pl-3 text-right">
-                          {o.receiptUrl ? (
-                            <a
-                              href={o.receiptUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-[var(--muted)] hover:text-foreground"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" /> Receipt
-                            </a>
-                          ) : (
-                            <button
-                              type="button"
-                              className="inline-flex cursor-pointer items-center gap-1 text-[var(--muted)] hover:text-foreground"
-                              onClick={() => window.print()}
-                              title="Print receipt"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" /> Receipt
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-6 lg:col-span-4">
-          <SpotlightCard className="space-y-3 p-5">
-            <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
-              <CreditCard className="h-3.5 w-3.5" /> Payment method
-            </h3>
-            {stripeConfigured ? (
-              <>
-                <p className="text-xs text-[var(--muted)]">
-                  Card updates, invoices, and cancellations are handled in the Stripe Customer Portal.
-                </p>
-                <button
-                  type="button"
-                  onClick={handlePortal}
-                  disabled={portalLoading || !hasStripeCustomer}
-                  className="btn-primary flex w-full cursor-pointer items-center justify-center gap-2 py-2.5 text-xs disabled:opacity-50"
-                >
-                  {portalLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+              <h2 className="mt-1 font-display text-2xl font-bold tracking-tight">
+                {current?.name || currentPlan}
+              </h2>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                Status: <span className="font-semibold text-foreground">{status}</span>
+                {currentPlan !== 'FREE' && status === 'ACTIVE' ? (
+                  <>
+                    {' '}
+                    ·{' '}
+                    <span className="font-semibold text-foreground">
+                      {currentBillingInterval === 'year' ? 'Annual' : 'Monthly'}
+                    </span>
+                  </>
+                ) : null}
+              </p>
+              {currentPeriodEnd && status !== 'CANCELED' && currentPlan !== 'FREE' && (
+                <p className="mt-2 text-xs text-[var(--muted)]">
+                  {cancelAtPeriodEnd ? (
+                    <>
+                      Cancels on{' '}
+                      <span className="font-semibold text-foreground">
+                        {new Date(currentPeriodEnd).toLocaleDateString()}
+                      </span>
+                      — then you’ll move to Free. You can renew anytime from Manage billing.
+                    </>
                   ) : (
                     <>
-                      Manage billing in Stripe <ExternalLink className="h-3.5 w-3.5" />
+                      Current period renews{' '}
+                      <span className="font-semibold text-foreground">
+                        {new Date(currentPeriodEnd).toLocaleDateString()}
+                      </span>
+                      . Plan changes only charge the prorated difference.
                     </>
                   )}
+                </p>
+              )}
+              {status === 'PAST_DUE' && (
+                <p className="mt-2 text-xs font-medium text-amber-800">
+                  Payment failed. Update your card under Manage billing to keep {currentPlan} access.
+                </p>
+              )}
+              {status === 'CANCELED' && (
+                <p className="mt-2 text-xs text-[var(--muted)]">
+                  Subscription ended. You’re on Free features until you subscribe again.
+                </p>
+              )}
+            </div>
+            <div className="text-right">
+              <p className="font-display text-3xl font-bold">
+                ${current?.priceMonthly ?? 0}
+                <span className="text-sm font-normal text-[var(--muted)]">/mo</span>
+              </p>
+              <div className="mt-3 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleRefreshPlan}
+                  disabled={confirming}
+                  className="rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold hover:bg-[var(--surface-soft)] disabled:opacity-50"
+                >
+                  Refresh plan
                 </button>
-                {!hasStripeCustomer && (
-                  <p className="text-[10px] text-[var(--muted)]">
-                    Subscribe to a paid plan first to create your Stripe customer profile.
-                  </p>
+                {stripeConfigured && (
+                  <button
+                    type="button"
+                    onClick={handlePortal}
+                    disabled={portalLoading || !hasStripeCustomer}
+                    className="btn-primary inline-flex items-center gap-1.5 px-3 py-2 text-xs disabled:opacity-50"
+                  >
+                    {portalLoading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <>
+                        Manage in Stripe <ExternalLink className="h-3.5 w-3.5" />
+                      </>
+                    )}
+                  </button>
                 )}
-              </>
-            ) : (
-              <div className="flex gap-2 rounded-xl border border-amber-500/30 bg-amber-50 p-3 text-xs text-amber-900">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  Stripe credentials are not in .env yet. Paid plan switches activate locally for
-                  development; add keys to enable live Checkout.
-                </span>
               </div>
-            )}
-          </SpotlightCard>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Plans */}
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-sm font-bold">Change plan</h3>
+          <div className="flex rounded-xl border border-[var(--border)] bg-white p-1 text-xs font-semibold">
+            {(['month', 'year'] as const).map((iv) => (
+              <button
+                key={iv}
+                type="button"
+                onClick={() => setBillingInterval(iv)}
+                className={`rounded-lg px-3 py-1.5 ${
+                  billingInterval === iv
+                    ? 'bg-[#171c19] text-white'
+                    : 'text-[var(--muted)] hover:text-foreground'
+                }`}
+              >
+                {iv === 'month' ? 'Monthly' : 'Annual'}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+
+        <div className="space-y-3">
+          {catalog.map((p) => {
+            const isFree = p.code === 'FREE' || p.priceMonthly === 0;
+            const isCurrentPlan = p.code === currentPlan;
+            const intervalMatches = billingInterval === currentBillingInterval;
+            const isFullyCurrent =
+              isCurrentPlan && status === 'ACTIVE' && (isFree || intervalMatches);
+            const needsIntervalSwitch =
+              isCurrentPlan && status === 'ACTIVE' && !isFree && !intervalMatches;
+            const price =
+              billingInterval === 'year' && !isFree
+                ? Math.round(p.priceMonthly * 0.8)
+                : p.priceMonthly;
+
+            return (
+              <div
+                key={p.id}
+                className={`flex flex-wrap items-center justify-between gap-4 rounded-2xl border bg-white px-5 py-4 ${
+                  isFullyCurrent
+                    ? 'border-teal-700/40 ring-1 ring-teal-700/20'
+                    : 'border-[var(--border)]'
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{p.name}</span>
+                    {isFullyCurrent && (
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-teal-700/10 px-2 py-0.5 text-[10px] font-bold text-teal-800">
+                        <Check className="h-3 w-3" /> Current
+                      </span>
+                    )}
+                    {needsIntervalSwitch && (
+                      <span className="rounded-lg bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                        Switch billing
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-[var(--muted)]">
+                    {p.blurb || 'PropIntel subscription'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-bold">
+                    ${price}
+                    <span className="font-normal text-[var(--muted)]">
+                      /{billingInterval === 'year' && !isFree ? 'mo yearly' : 'mo'}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isFullyCurrent || switching !== null}
+                    onClick={() => handleSwitchPlan(p.code)}
+                    className={`min-w-[7.5rem] rounded-xl px-4 py-2.5 text-xs font-semibold disabled:opacity-50 ${
+                      isFree
+                        ? 'border border-[var(--border)] hover:bg-[var(--surface-soft)]'
+                        : 'btn-primary'
+                    }`}
+                  >
+                    {switching === p.code ? (
+                      <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+                    ) : isFullyCurrent ? (
+                      'Active'
+                    ) : needsIntervalSwitch ? (
+                      billingInterval === 'year' ? 'Switch to annual' : 'Switch to monthly'
+                    ) : isFree ? (
+                      'Cancel at period end'
+                    ) : currentPlan !== 'FREE' && status === 'ACTIVE' ? (
+                      p.priceMonthly > (catalog.find((c) => c.code === currentPlan)?.priceMonthly || 0)
+                        ? 'Upgrade'
+                        : 'Switch plan'
+                    ) : stripeConfigured ? (
+                      'Subscribe'
+                    ) : (
+                      'Activate'
+                    )}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Orders */}
+      <section className="rounded-2xl border border-[var(--border)] bg-white p-6">
+        <h3 className="text-sm font-bold">Recent payments</h3>
+        {orders.length === 0 ? (
+          <p className="mt-3 text-sm text-[var(--muted)]">No payments yet.</p>
+        ) : (
+          <ul className="mt-4 divide-y divide-[var(--border)]">
+            {orders.slice(0, 8).map((o) => (
+              <li key={o.id} className="flex items-center justify-between gap-3 py-3 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">
+                    {formatPaymentDescription(o.description, o.plan)}
+                  </p>
+                  <p className="text-xs text-[var(--muted)]">
+                    {new Date(o.createdAt).toLocaleDateString()} · {o.status}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-semibold">${o.amount.toFixed(2)}</p>
+                  {o.receiptUrl && (
+                    <a
+                      href={o.receiptUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-teal-800 hover:underline"
+                    >
+                      Receipt
+                    </a>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Loader2,
   Search,
   AlertTriangle,
   Activity,
@@ -10,6 +9,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import PageHeader from '@/components/dashboard/PageHeader';
+import { SkeletonRows } from '@/components/ui/Skeleton';
 import { usePageTitle } from '@/components/DocumentTitle';
 import {
   getAdminAuditLogs,
@@ -133,7 +133,7 @@ export default function AdminLogsPage() {
   }, [activityLogs, search]);
 
   const tabs: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { key: 'activity', label: 'Audit (database)', icon: Activity },
+    { key: 'activity', label: 'Audit log', icon: Activity },
     { key: 'requests', label: 'Requests (files)', icon: Globe },
     { key: 'errors', label: 'Errors (files)', icon: AlertTriangle },
   ];
@@ -142,14 +142,16 @@ export default function AdminLogsPage() {
     <div className="mx-auto max-w-7xl space-y-8">
       <PageHeader
         title="Logs & diagnostics"
-        description="Audit events live in the database. HTTP requests and errors are day-wise files under logs/."
+        description="Review audit events, request logs, and system errors."
         actions={
           <button
             type="button"
             onClick={load}
-            className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold hover:bg-white"
+            disabled={loading}
+            className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold hover:bg-white disabled:opacity-60"
           >
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Refreshing…' : 'Refresh'}
           </button>
         }
       />
@@ -248,9 +250,7 @@ export default function AdminLogsPage() {
 
       <div className="surface-card p-4 sm:p-5">
         {loading ? (
-          <div className="flex justify-center py-12 text-[var(--muted)]">
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading logs…
-          </div>
+          <SkeletonRows rows={8} cols={4} />
         ) : tab === 'activity' ? (
           filteredActivity.length === 0 ? (
             <p className="py-10 text-center text-xs text-[var(--muted)]">No audit events yet.</p>
