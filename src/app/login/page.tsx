@@ -2,25 +2,39 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Building2, ShieldAlert, User, Shield, ArrowRight, Loader2 } from 'lucide-react';
+import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import { loginUserAction } from './actions';
 
 function LoginPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
+  const redirectTo = searchParams.get('redirect');
 
   const [activeTab, setActiveTab] = useState<'signin' | 'register'>('signin');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setActiveTab(tabParam === 'register' ? 'register' : 'signin');
   }, [tabParam]);
+
+  const finishLogin = (role: 'ADMIN' | 'INVESTOR' | string) => {
+    const fallback = role === 'ADMIN' ? '/admin' : '/dashboard';
+    const target =
+      redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
+        ? redirectTo
+        : fallback;
+    router.push(target);
+    router.refresh();
+  };
 
   const handleCustomLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,9 +44,11 @@ function LoginPageContent() {
     try {
       await loginUserAction(email);
     } catch (err: unknown) {
+      if (isRedirectError(err)) {
+        finishLogin(email.toLowerCase().includes('admin') ? 'ADMIN' : 'INVESTOR');
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Login failed. Try a sandbox profile.';
-      // Next.js redirect throws; ignore NEXT_REDIRECT
-      if (typeof message === 'string' && message.includes('NEXT_REDIRECT')) return;
       setError(message);
       setIsLoading(null);
     }
@@ -44,8 +60,11 @@ function LoginPageContent() {
     try {
       await loginUserAction(targetEmail);
     } catch (err: unknown) {
+      if (isRedirectError(err)) {
+        finishLogin(targetEmail.includes('admin') ? 'ADMIN' : 'INVESTOR');
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Login failed.';
-      if (typeof message === 'string' && message.includes('NEXT_REDIRECT')) return;
       setError(message);
       setIsLoading(null);
     }
@@ -79,7 +98,7 @@ function LoginPageContent() {
             <button
               type="button"
               onClick={() => setActiveTab('signin')}
-              className={`relative z-10 rounded-lg py-2.5 text-sm font-semibold transition ${
+              className={`relative z-10 cursor-pointer rounded-lg py-2.5 text-sm font-semibold transition ${
                 activeTab === 'signin' ? 'text-teal-50' : 'text-[var(--muted)]'
               }`}
             >
@@ -88,7 +107,7 @@ function LoginPageContent() {
             <button
               type="button"
               onClick={() => setActiveTab('register')}
-              className={`relative z-10 rounded-lg py-2.5 text-sm font-semibold transition ${
+              className={`relative z-10 cursor-pointer rounded-lg py-2.5 text-sm font-semibold transition ${
                 activeTab === 'register' ? 'text-teal-50' : 'text-[var(--muted)]'
               }`}
             >
@@ -114,11 +133,10 @@ function LoginPageContent() {
                 <Field label="Full name">
                   <input
                     type="text"
-                    required
                     placeholder="Alex Investor"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full glass-input px-3.5 py-2.5 text-sm"
+                    className="glass-input w-full px-3.5 py-2.5 text-sm"
                   />
                 </Field>
                 <Field label="Company">
@@ -127,7 +145,7 @@ function LoginPageContent() {
                     placeholder="Apex Equity Partners"
                     value={company}
                     onChange={(e) => setCompany(e.target.value)}
-                    className="w-full glass-input px-3.5 py-2.5 text-sm"
+                    className="glass-input w-full px-3.5 py-2.5 text-sm"
                   />
                 </Field>
               </>
@@ -137,30 +155,32 @@ function LoginPageContent() {
               <input
                 type="email"
                 required
-                placeholder="you@example.com"
+                placeholder="investor@propintel.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full glass-input px-3.5 py-2.5 text-sm"
+                className="glass-input w-full px-3.5 py-2.5 text-sm"
               />
             </Field>
 
-            <Field label="Password">
+            <Field label="Password (demo — any value)">
               <input
                 type="password"
-                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full glass-input px-3.5 py-2.5 text-sm"
+                className="glass-input w-full px-3.5 py-2.5 text-sm"
               />
             </Field>
 
             <p className="text-[11px] leading-relaxed text-[var(--muted-foreground)]">
-              Demo mode: use a sandbox profile below. Custom emails need Clerk in production.
+              Demo mode: click a sandbox profile below (recommended), or enter{' '}
+              <strong>investor@propintel.com</strong> / <strong>admin@propintel.com</strong>.
             </p>
 
             <button
               type="submit"
               disabled={isLoading !== null}
-              className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-sm disabled:opacity-50"
+              className="btn-primary flex w-full cursor-pointer items-center justify-center gap-2 py-3 text-sm disabled:opacity-50"
             >
               {isLoading === email ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -174,7 +194,7 @@ function LoginPageContent() {
           </form>
 
           <div className="mt-6 space-y-3 border-t border-[var(--border)] pt-6">
-            <p className="text-center text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+            <p className="text-center text-[11px] font-bold tracking-[0.16em] text-[var(--muted-foreground)] uppercase">
               Sandbox access
             </p>
 
@@ -213,7 +233,7 @@ function LoginPageContent() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--muted)]">{label}</span>
+      <span className="text-[11px] font-bold tracking-wider text-[var(--muted)] uppercase">{label}</span>
       {children}
     </label>
   );
@@ -243,7 +263,7 @@ function QuickLogin({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3.5 text-left transition hover:border-teal-700/25 disabled:opacity-50"
+      className="group flex w-full cursor-pointer items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3.5 text-left transition hover:border-teal-700/25 disabled:opacity-50"
     >
       <div className="flex items-center gap-3">
         <div

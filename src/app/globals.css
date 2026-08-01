@@ -48,6 +48,30 @@ body {
   overflow-x: hidden;
 }
 
+/* Clickable affordance for interactive controls */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+input[type="submit"]:not(:disabled),
+input[type="button"]:not(:disabled),
+input[type="reset"]:not(:disabled),
+summary,
+.btn-ink,
+.btn-primary,
+.btn-secondary,
+a.btn-ink,
+a.btn-primary,
+a.btn-secondary {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"],
+input[type="submit"]:disabled,
+input[type="button"]:disabled,
+input[type="reset"]:disabled {
+  cursor: not-allowed;
+}
+
 .font-display {
   font-family: var(--font-display);
   letter-spacing: -0.035em;
@@ -108,6 +132,7 @@ body {
   color: #f7faf7;
   font-weight: 650;
   border-radius: 999px;
+  cursor: pointer;
   transition: transform 0.2s ease, background 0.2s ease;
 }
 
@@ -121,6 +146,7 @@ body {
   color: var(--primary-foreground);
   font-weight: 650;
   border-radius: 999px;
+  cursor: pointer;
   transition: transform 0.2s ease, background 0.2s ease;
 }
 
@@ -136,6 +162,7 @@ body {
   font-weight: 600;
   border-radius: 999px;
   opacity: 0.9;
+  cursor: pointer;
   transition: background 0.2s ease, opacity 0.2s ease;
 }
 
