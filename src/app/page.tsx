@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import AtmosphericHero from '@/components/ui/AtmosphericHero';
 import FloatingDealCard from '@/components/ui/FloatingDealCard';
+import { BrandMark } from '@/components/BrandLogo';
 
 const FAQS = [
   {
@@ -129,11 +130,7 @@ export default function LandingPage() {
           <header className="absolute inset-x-0 top-0 z-20">
             <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 md:px-10 md:py-6">
               <Link href="/" className="flex items-center gap-2.5">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/95 text-[#3d5a4c] shadow-sm">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1h-5v-7H9v7H4a1 1 0 01-1-1v-10.5z" fill="currentColor" />
-                  </svg>
-                </span>
+                <BrandMark size={36} />
                 <span className="font-display text-lg font-bold tracking-tight text-white md:text-xl">
                   PropIntel
                 </span>
@@ -161,7 +158,7 @@ export default function LandingPage() {
                 >
                   Sign in
                 </Link>
-                <Link href="/login?tab=register" className="btn-ink px-5 py-2.5 text-xs md:text-sm">
+                <Link href="/login?tab=register" className="btn-ink btn-pill px-5 py-2.5 text-xs md:text-sm">
                   Start free
                 </Link>
               </div>
@@ -204,7 +201,7 @@ export default function LandingPage() {
                 transition={{ duration: 0.6, delay: 0.4 }}
                 className="mt-10 flex flex-wrap items-center gap-3"
               >
-                <Link href="/login?tab=register" className="btn-ink inline-flex items-center gap-2 px-7 py-3.5 text-sm">
+                <Link href="/login?tab=register" className="btn-ink btn-pill inline-flex items-center gap-2 px-7 py-3.5 text-sm">
                   Start free <ArrowRight className="h-4 w-4" />
                 </Link>
                 <a
@@ -734,11 +731,7 @@ export default function LandingPage() {
             <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-6">
               <div className="lg:col-span-2">
                 <Link href="/" className="inline-flex items-center gap-2.5">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#3d5a4c] text-white">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                      <path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1h-5v-7H9v7H4a1 1 0 01-1-1v-10.5z" fill="currentColor" />
-                    </svg>
-                  </span>
+                  <BrandMark size={36} />
                   <span className="font-display text-xl font-bold tracking-tight">PropIntel</span>
                 </Link>
                 <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/55">
@@ -761,8 +754,8 @@ export default function LandingPage() {
                 title="Product"
                 links={[
                   { label: 'Platform', href: '#platform' },
-                  { label: 'Analyzer', href: '/dashboard/analyzer' },
-                  { label: 'CRM Pipeline', href: '/dashboard/crm' },
+                  { label: 'Analyzer', href: '/login?redirect=/dashboard/analyzer' },
+                  { label: 'CRM Pipeline', href: '/login?redirect=/dashboard/crm' },
                   { label: 'Pricing', href: '#pricing' },
                 ]}
               />
@@ -778,10 +771,10 @@ export default function LandingPage() {
               <FooterCol
                 title="Company"
                 links={[
-                  { label: 'About', href: '#' },
-                  { label: 'Coaching', href: '/dashboard/coaching' },
+                  { label: 'Sign in', href: '/login' },
+                  { label: 'Coaching', href: '/login?redirect=/dashboard/coaching' },
                   { label: 'Contact', href: 'mailto:hello@propintel.com' },
-                  { label: 'Careers', href: '#' },
+                  { label: 'Create account', href: '/login?tab=register' },
                 ]}
               />
               <FooterCol

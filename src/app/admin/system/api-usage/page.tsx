@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, Cpu } from 'lucide-react';
 import SpotlightCard from '@/components/ui/SpotlightCard';
+import PageHeader from '@/components/dashboard/PageHeader';
 import { getAdminApiUsage } from '@/app/actions/adminExpandActions';
 
 export default function AdminApiUsagePage() {
@@ -44,15 +45,13 @@ export default function AdminApiUsagePage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="font-display text-3xl tracking-tight">AI & API usage</h1>
-        <p className="text-sm text-[var(--muted)]">
-          Token estimates, model config, and property lookup fallback rates.
-        </p>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="AI & API usage"
+        description="Token estimates, model config, and property lookup fallback rates."
+      />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SpotlightCard className="p-5">
           <div className="text-[10px] font-bold uppercase text-[var(--muted-foreground)]">AI requests</div>
           <div className="mt-1 text-2xl font-extrabold">{metrics.totalAiRequests}</div>
@@ -84,7 +83,7 @@ export default function AdminApiUsagePage() {
               <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
             </select>
           </label>
-          <div className="grid grid-cols-3 gap-3 text-center text-xs">
+          <div className="grid grid-cols-1 gap-3 text-center text-xs sm:grid-cols-3">
             <div className="rounded-lg border border-[var(--border)] p-3">
               <div className="text-[var(--muted)]">FREE</div>
               <div className="font-bold">5 / mo</div>

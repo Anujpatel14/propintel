@@ -12,7 +12,10 @@ function createPrismaClient() {
 }
 
 function hasExpandedModels(client: PrismaClient): boolean {
-  return typeof (client as { userSettings?: unknown }).userSettings !== 'undefined';
+  return (
+    typeof (client as { userSettings?: unknown }).userSettings !== 'undefined' &&
+    typeof (client as { paymentEvent?: unknown }).paymentEvent !== 'undefined'
+  );
 }
 
 /**
@@ -34,7 +37,7 @@ function getClient(): PrismaClient {
     if (!hasExpandedModels(client) && !globalForPrisma.prismaWarnedOutdated) {
       globalForPrisma.prismaWarnedOutdated = true;
       console.warn(
-        '[prisma] Client is missing UserSettings/Order delegates. Run `npx prisma generate` and restart `npm run dev` for full features. Auth/core queries will still work.'
+        '[prisma] Client may be outdated. Run `npx prisma generate` and restart `npm run dev` for full features. Auth/core queries will still work.'
       );
     }
     globalForPrisma.prisma = client;
@@ -67,8 +70,8 @@ function isRetryableDbError(error: unknown): boolean {
 }
 
 /**
- * Retries Prisma operations when Neon is waking from idle or a pooled
- * connection was terminated by the administrator.
+ * Retries Prisma operations when the DB is waking from idle (e.g. Neon) or a
+ * pooled connection was terminated. Local Postgres usually succeeds on first try.
  */
 export async function withDbRetry<T>(
   operation: () => Promise<T>,
@@ -82,6 +85,18 @@ export async function withDbRetry<T>(
     } catch (error) {
       lastError = error;
       if (!isRetryableDbError(error) || attempt === retries - 1) {
+        if (attempt === retries - 1 || !isRetryableDbError(error)) {
+          // Best-effort diagnostics (avoid circular await loops on logger DB writes)
+          try {
+            const { logError } = await import('@/lib/logger');
+            void logError('Database operation failed', error, {
+              category: 'DB',
+              meta: { attempt: attempt + 1, retries },
+            });
+          } catch {
+            console.error('[db] operation failed', error);
+          }
+        }
         throw error;
       }
 

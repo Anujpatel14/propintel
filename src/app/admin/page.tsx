@@ -1,17 +1,14 @@
 import React from 'react';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { getCurrentUser } from '@/lib/services/auth';
 import {
-  ShieldAlert,
   Users,
   DollarSign,
   Cpu,
   FolderLock,
   Database,
 } from 'lucide-react';
-import { logoutUserAction } from '../login/actions';
 import SpotlightCard from '@/components/ui/SpotlightCard';
+import PageHeader from '@/components/dashboard/PageHeader';
 import { getAdminDashboardMetrics } from '@/app/actions/adminActions';
 
 function formatRelativeTime(date: Date): string {
@@ -25,57 +22,17 @@ function formatRelativeTime(date: Date): string {
 }
 
 export default async function AdminPage() {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    redirect('/login');
-  }
-
-  if (user.role !== 'ADMIN') {
-    return (
-      <div className="relative flex min-h-screen flex-col items-center justify-center bg-[var(--background)] p-6 text-foreground">
-        <div className="glass-panel relative z-10 w-full max-w-md space-y-6 rounded-2xl border-red-500/20 bg-red-950/5 p-8 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-red-500/20 bg-red-500/10">
-            <ShieldAlert className="h-8 w-8 text-red-500" />
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-xl font-extrabold">Access Denied</h1>
-            <p className="text-xs text-[var(--muted)]">
-              Your profile (<strong>{user.email}</strong>) is not an administrator.
-            </p>
-          </div>
-          <div className="flex flex-col justify-center gap-3 sm:flex-row">
-            <Link
-              href="/dashboard"
-              className="rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-5 py-2.5 text-xs font-semibold"
-            >
-              Back to Dashboard
-            </Link>
-            <form action={logoutUserAction}>
-              <button
-                type="submit"
-                className="w-full cursor-pointer rounded-lg bg-red-500 px-5 py-2.5 text-xs font-bold text-white"
-              >
-                Sign Out
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const metricsResult = await getAdminDashboardMetrics();
   const metrics = metricsResult.metrics;
   const recentLogs = metricsResult.recentLogs;
   const estimatedMrr = metrics.activeSubscribers * 49;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
-      <div>
-        <h1 className="font-display text-3xl tracking-tight md:text-4xl">Platform operations</h1>
-        <p className="text-sm text-[var(--muted)]">Live Neon metrics and recent activity.</p>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Platform operations"
+        description="Live Neon metrics and recent activity."
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SpotlightCard className="flex justify-between p-5">

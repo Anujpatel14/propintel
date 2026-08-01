@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { Loader2, Check, User, Shield } from 'lucide-react';
 import {
   getProfileSettings,
   updateProfileSettings,
 } from '@/app/actions/settingsActions';
+import PageHeader from '@/components/dashboard/PageHeader';
+import SettingsTabs from '@/components/dashboard/SettingsTabs';
 
 const STRATEGIES = [
   'Wholesaler',
@@ -63,38 +64,28 @@ export default function ProfileSettingsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20 text-[var(--muted)]">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading profile…
+      <div className="mx-auto max-w-7xl space-y-8">
+        <PageHeader
+          title="Profile settings"
+          description="Personal info, investor strategy, and target criteria."
+          actions={<SettingsTabs />}
+        />
+        <div className="flex items-center justify-center py-20 text-[var(--muted)]">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading profile…
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
-      <div className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-display text-3xl tracking-tight md:text-4xl">Profile settings</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Personal info, investor strategy, and target criteria.
-          </p>
-        </div>
-        <div className="flex gap-2 text-xs">
-          <Link
-            href="/dashboard/settings/profile"
-            className="rounded-lg bg-teal-700 px-3 py-2 font-bold text-white"
-          >
-            Profile
-          </Link>
-          <Link
-            href="/dashboard/settings/underwriting"
-            className="rounded-lg border border-[var(--border)] px-3 py-2 font-semibold text-[var(--muted)] hover:bg-white"
-          >
-            Underwriting
-          </Link>
-        </div>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Profile settings"
+        description="Personal info, investor strategy, and target criteria."
+        actions={<SettingsTabs />}
+      />
 
-      <form onSubmit={handleSave} className="space-y-6">
+      <form onSubmit={handleSave} className="mx-auto max-w-3xl space-y-6">
         <div className="surface-card space-y-5 p-6">
           <h2 className="flex items-center gap-2 text-sm font-bold">
             <User className="h-4 w-4 text-teal-700" /> Personal information
@@ -203,8 +194,8 @@ export default function ProfileSettingsPage() {
             <Shield className="h-4 w-4 text-teal-700" /> Security & sessions
           </h2>
           <p className="text-xs text-[var(--muted)]">
-            Password reset, 2FA, and OAuth providers are managed through Clerk when production auth
-            is enabled. Sandbox sessions expire after 7 days or on sign-out.
+            Password reset, 2FA, OAuth, and &ldquo;Stay signed in&rdquo; are managed in Clerk. Open
+            your account menu or the Clerk user profile to update security settings.
           </p>
         </div>
 

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" fill="none" role="img" aria-label="PropIntel">
+  <rect width="64" height="64" rx="14" fill="#0f766e"/>
+  <path fill="#ffffff" d="M16 48V22h10v26H16zm14 0V14h12v34H30zm16 0V26h10v22H46z"/>
+  <path fill="#0f766e" fill-opacity="0.35" d="M19 26h4v3h-4v-3zm0 7h4v3h-4v-3zm0 7h4v3h-4v-3zm14-17h4v3h-4v-3zm0 7h4v3h-4v-3zm0 7h4v3h-4v-3zm0 7h4v3h-4v-3zm16-10h4v3h-4v-3zm0 7h4v3h-4v-3z"/>
+  <rect x="48" y="12" width="8" height="8" rx="2" fill="#c4a050"/>
+  <text x="80" y="42" fill="#141a17" font-family="Syne, Outfit, ui-sans-serif, system-ui, sans-serif" font-size="28" font-weight="700" letter-spacing="-0.03em">PropIntel</text>
+</svg>

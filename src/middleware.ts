@@ -1,32 +1,36 @@
 import { NextResponse } from 'next/server';
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import type { NextRequest } from 'next/server';
+import { clerkMiddleware } from '@clerk/nextjs/server';
 
-const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/admin(.*)']);
+/**
+ * Keep this file minimal. Next 16 + Turbopack has intermittent 404s on nested
+ * routes when middleware does heavy work (route matchers, outbound fetch, etc.).
+ * Auth gating for dashboard/admin stays here; request logging lives elsewhere.
+ */
+export default clerkMiddleware(async (auth, req: NextRequest) => {
+  const { pathname } = req.nextUrl;
 
-export default clerkMiddleware(async (auth, req) => {
-  // Sandbox demo cookie bypasses Clerk entirely
-  const sandbox = req.cookies.get('propintel_session')?.value;
-  if (sandbox) {
-    return NextResponse.next();
+  if (
+    pathname.startsWith('/api/log') ||
+    pathname.startsWith('/api/stripe/webhook') ||
+    pathname.startsWith('/api/webhooks')
+  ) {
+    return NextResponse.next({ request: req });
   }
 
-  if (!isProtectedRoute(req)) {
-    return NextResponse.next();
-  }
+  const isProtected =
+    pathname.startsWith('/dashboard') || pathname.startsWith('/admin');
 
-  // Prefer our /login page over Clerk hosted UI for unauthenticated users
-  try {
+  if (isProtected) {
     const session = await auth();
-    if (session.userId) {
-      return NextResponse.next();
+    if (!session.userId) {
+      const loginUrl = new URL('/login', req.url);
+      loginUrl.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(loginUrl);
     }
-  } catch (err) {
-    console.error('Clerk auth check failed; redirecting to sandbox login:', err);
   }
 
-  const loginUrl = new URL('/login', req.url);
-  loginUrl.searchParams.set('redirect', req.nextUrl.pathname);
-  return NextResponse.redirect(loginUrl);
+  return NextResponse.next({ request: req });
 });
 
 export const config = {

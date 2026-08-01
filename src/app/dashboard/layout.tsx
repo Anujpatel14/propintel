@@ -1,20 +1,31 @@
 import React from 'react';
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { getCurrentUser } from '@/lib/services/auth';
+import { resolveAppUser } from '@/lib/services/auth';
 import { getUserSubscription } from '@/lib/services/stripe';
-import { logoutUserAction } from '../login/actions';
 import DashboardShell from '@/components/dashboard/DashboardShell';
+
+export const metadata: Metadata = {
+  title: 'Overview',
+};
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
 export default async function DashboardLayout({ children }: DashboardLayoutProps) {
-  const user = await getCurrentUser();
+  const resolved = await resolveAppUser();
 
-  if (!user) {
-    redirect('/login');
+  if (resolved.status === 'anonymous') {
+    redirect('/login?redirect=/dashboard');
   }
+
+  if (resolved.status === 'sync_error') {
+    // Break login↔dashboard loop: force a clean sign-in
+    redirect('/login?error=session');
+  }
+
+  const user = resolved.user;
 
   let planLabel = 'Free';
   try {
@@ -25,17 +36,16 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
           ? `${sub.plan} Trial`
           : String(sub.plan);
     } else {
-      planLabel = 'PRO Trial';
+      planLabel = 'FREE';
     }
   } catch {
-    planLabel = 'PRO Trial';
+    planLabel = 'FREE';
   }
 
   return (
     <DashboardShell
       user={{ name: user.name, email: user.email, role: user.role }}
       planLabel={planLabel}
-      logoutAction={logoutUserAction}
     >
       {children}
     </DashboardShell>

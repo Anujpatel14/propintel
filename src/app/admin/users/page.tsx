@@ -4,6 +4,7 @@ import React, { useEffect, useState, useTransition } from 'react';
 import { CheckCircle, XCircle, ArrowRightLeft, Loader2, Search, UserX, UserCheck } from 'lucide-react';
 import { updateUserRole } from '@/app/actions/adminActions';
 import { getAdminUsers, updateUserStatus } from '@/app/actions/adminExpandActions';
+import PageHeader from '@/components/dashboard/PageHeader';
 import type { Role } from '@prisma/client';
 
 interface UserRow {
@@ -91,11 +92,11 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="font-display text-3xl tracking-tight">User directory</h1>
-        <p className="text-sm text-[var(--muted)]">Search, filter, and manage platform accounts.</p>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="User directory"
+        description="Search, filter, and manage platform accounts."
+      />
 
       <div className="flex flex-wrap gap-3">
         <div className="relative min-w-[220px] flex-1">
@@ -138,7 +139,7 @@ export default function AdminUsersPage() {
         <button
           type="button"
           onClick={load}
-          className="cursor-pointer rounded-xl bg-teal-700 px-4 py-2 text-xs font-bold text-white"
+          className="btn-primary cursor-pointer px-4 py-2 text-xs"
         >
           Apply
         </button>
@@ -150,7 +151,7 @@ export default function AdminUsersPage() {
             <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading…
           </div>
         ) : (
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[720px] text-left text-xs">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)] uppercase">
                 <th className="py-3 pr-3">User</th>
@@ -171,7 +172,7 @@ export default function AdminUsersPage() {
                     <div className="text-[10px] text-[var(--muted-foreground)]">{u.company}</div>
                   </td>
                   <td className="px-3 py-3">
-                    <span className="rounded-full bg-teal-700/15 px-2 py-0.5 text-[9px] font-extrabold text-teal-800 uppercase">
+                    <span className="badge-status bg-teal-700/15 text-teal-800">
                       {u.role}
                     </span>
                   </td>
@@ -194,31 +195,33 @@ export default function AdminUsersPage() {
                     {u.analyses} analyses · {u.deals} CRM
                   </td>
                   <td className="px-3 py-3 text-[var(--muted)]">{u.joined}</td>
-                  <td className="space-x-2 py-3 pl-3 text-right">
-                    <button
-                      type="button"
-                      disabled={isPending && pendingId === u.id}
-                      onClick={() => toggleRole(u.id, u.role)}
-                      className="inline-flex cursor-pointer items-center gap-1 rounded border border-[var(--border)] px-2 py-1 text-[10px] disabled:opacity-50"
-                    >
-                      <ArrowRightLeft className="h-3 w-3 text-teal-700" /> Role
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isPending && pendingId === u.id}
-                      onClick={() => toggleStatus(u.id, u.status)}
-                      className="inline-flex cursor-pointer items-center gap-1 rounded border border-[var(--border)] px-2 py-1 text-[10px] disabled:opacity-50"
-                    >
-                      {u.status === 'ACTIVE' ? (
-                        <>
-                          <UserX className="h-3 w-3 text-red-400" /> Suspend
-                        </>
-                      ) : (
-                        <>
-                          <UserCheck className="h-3 w-3 text-teal-700" /> Activate
-                        </>
-                      )}
-                    </button>
+                  <td className="py-3 pl-3 text-right">
+                    <div className="flex flex-col items-stretch justify-end gap-1 sm:inline-flex sm:flex-row sm:items-center">
+                      <button
+                        type="button"
+                        disabled={isPending && pendingId === u.id}
+                        onClick={() => toggleRole(u.id, u.role)}
+                        className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[var(--border)] px-3 py-2 text-[11px] font-semibold disabled:opacity-50"
+                      >
+                        <ArrowRightLeft className="h-3.5 w-3.5 text-teal-700" /> Role
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isPending && pendingId === u.id}
+                        onClick={() => toggleStatus(u.id, u.status)}
+                        className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[var(--border)] px-3 py-2 text-[11px] font-semibold disabled:opacity-50"
+                      >
+                        {u.status === 'ACTIVE' ? (
+                          <>
+                            <UserX className="h-3.5 w-3.5 text-red-400" /> Suspend
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="h-3.5 w-3.5 text-teal-700" /> Activate
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

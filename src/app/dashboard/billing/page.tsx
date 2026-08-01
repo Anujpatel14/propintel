@@ -1,20 +1,22 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { ExternalLink, Loader2, CreditCard, ShieldCheck, AlertTriangle } from 'lucide-react';
 import SpotlightCard from '@/components/ui/SpotlightCard';
+import PageHeader from '@/components/dashboard/PageHeader';
 import {
   switchUserPlan,
   getUserSubscriptionDetails,
+  openBillingPortal,
 } from '@/app/actions/billingActions';
 import { getUserOrders } from '@/app/actions/orderActions';
 
-const PLAN_META: Record<string, { label: string; price: string; blurb: string }> = {
+const FALLBACK_META: Record<string, { label: string; price: string; blurb: string }> = {
   FREE: {
     label: 'Free Starter',
     price: '$0',
-    blurb:
-      'Limits property analysis archives to 3 saved deals. No AI tools, PDF report compilations, or CRM pipeline boards.',
+    blurb: 'Limits property analysis archives to 3 saved deals.',
   },
   PRO: {
     label: 'Professional (PRO)',
@@ -24,8 +26,16 @@ const PLAN_META: Record<string, { label: string; price: string; blurb: string }>
   ENTERPRISE: {
     label: 'Enterprise',
     price: '$99',
-    blurb: 'Multi-agent accounts, custom report branding, and API endpoints for investment funds.',
+    blurb: 'Multi-agent accounts, custom report branding, and API endpoints.',
   },
+};
+
+type CatalogPlan = {
+  id: string;
+  code: string;
+  name: string;
+  priceMonthly: number;
+  blurb: string | null;
 };
 
 interface OrderRow {
@@ -35,15 +45,23 @@ interface OrderRow {
   description: string | null;
   status: string;
   stripeInvoiceId: string | null;
+  receiptUrl?: string | null;
   createdAt: Date | string;
 }
 
-export default function BillingPage() {
-  const [currentPlan, setCurrentPlan] = useState('PRO');
-  const [status, setStatus] = useState('ACTIVE');
+function BillingPageInner() {
+  const searchParams = useSearchParams();
+  const [currentPlan, setCurrentPlan] = useState('FREE');
+  const [status, setStatus] = useState('INACTIVE');
+  const [catalog, setCatalog] = useState<CatalogPlan[]>([]);
+  const [stripeConfigured, setStripeConfigured] = useState(false);
+  const [hasStripeCustomer, setHasStripeCustomer] = useState(false);
   const [isLoadingPlan, setIsLoadingPlan] = useState(true);
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = async () => {
     const [details, orderResult] = await Promise.all([
@@ -52,10 +70,20 @@ export default function BillingPage() {
     ]);
     setCurrentPlan(details.plan);
     setStatus(details.status);
+    setCatalog(details.plans || []);
+    setStripeConfigured(details.stripeConfigured);
+    setHasStripeCustomer(details.hasStripeCustomer);
     if (orderResult.success) setOrders(orderResult.orders);
   };
 
   useEffect(() => {
+    const checkout = searchParams.get('checkout');
+    if (checkout === 'success') {
+      setNotice('Payment successful. Your plan will update once Stripe confirms the subscription.');
+    } else if (checkout === 'canceled') {
+      setNotice('Checkout was canceled. No charge was made.');
+    }
+
     (async () => {
       try {
         await refresh();
@@ -65,38 +93,86 @@ export default function BillingPage() {
         setIsLoadingPlan(false);
       }
     })();
-  }, []);
+  }, [searchParams]);
 
-  const handleSwitchPlan = async (planName: 'FREE' | 'PRO' | 'ENTERPRISE') => {
+  const handleSwitchPlan = async (planName: string) => {
     if (planName === currentPlan) return;
     setIsLoading(planName);
+    setError(null);
+    setNotice(null);
     try {
       const result = await switchUserPlan(planName);
-      if (result.success) {
+      if (!result.success) {
+        setError(result.error || 'Could not change plan');
+        return;
+      }
+      if (result.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+        return;
+      }
+      if ('warning' in result && result.warning) {
+        setNotice(result.warning);
+      }
+      if (result.subscription) {
         setCurrentPlan(result.subscription.plan);
         setStatus(result.subscription.status);
-        const orderResult = await getUserOrders();
-        if (orderResult.success) setOrders(orderResult.orders);
       }
+      const orderResult = await getUserOrders();
+      if (orderResult.success) setOrders(orderResult.orders);
     } catch (e) {
       console.error(e);
+      setError('Something went wrong switching plans.');
     } finally {
       setIsLoading(null);
     }
   };
 
-  const meta = PLAN_META[currentPlan] || PLAN_META.PRO;
+  const handlePortal = async () => {
+    setPortalLoading(true);
+    setError(null);
+    try {
+      const result = await openBillingPortal();
+      if (result.success && result.url) {
+        window.location.href = result.url;
+        return;
+      }
+      setError(result.error || 'Could not open billing portal');
+    } catch {
+      setError('Could not open billing portal');
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
+  const currentCatalog = catalog.find((p) => p.code === currentPlan);
+  const meta = currentCatalog
+    ? {
+        label: currentCatalog.name,
+        price: `$${currentCatalog.priceMonthly}`,
+        blurb: currentCatalog.blurb || '',
+      }
+    : FALLBACK_META[currentPlan] || FALLBACK_META.FREE;
+
+  const otherPlans = catalog.filter((p) => p.code !== currentPlan);
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
-      <div className="border-b border-[var(--border)] pb-6">
-        <h1 className="text-2xl font-extrabold text-foreground md:text-3xl">
-          Billing & Subscriptions
-        </h1>
-        <p className="text-sm text-[var(--muted)]">
-          Manage plan tiers, review order history, and download receipts.
-        </p>
-      </div>
+      <PageHeader
+        title="Billing & subscriptions"
+        description="Manage plan tiers, pay securely with Stripe, and review invoices."
+      />
+
+      {notice && (
+        <div className="rounded-xl border border-teal-700/20 bg-teal-700/10 px-4 py-3 text-xs text-teal-800">
+          {notice}
+        </div>
+      )}
+      {error && (
+        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
         <div className="space-y-6 lg:col-span-8">
@@ -132,68 +208,55 @@ export default function BillingPage() {
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-foreground">Upgrade or Change Plan</h3>
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              {currentPlan !== 'PRO' && (
-                <SpotlightCard className="flex h-56 flex-col justify-between border-[var(--border)] bg-white p-5">
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-xs font-bold text-teal-800">Professional</span>
-                      <span className="text-xs font-bold">$49/mo</span>
-                    </div>
-                    <p className="text-[11px] text-[var(--muted)]">{PLAN_META.PRO.blurb}</p>
-                  </div>
-                  <button
-                    onClick={() => handleSwitchPlan('PRO')}
-                    disabled={isLoading !== null}
-                    className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-teal-700 py-2.5 text-xs font-bold text-white disabled:opacity-50"
+              {otherPlans.map((p) => {
+                const isFree = p.code === 'FREE' || p.priceMonthly === 0;
+                const isDark = p.code === 'ENTERPRISE';
+                return (
+                  <SpotlightCard
+                    key={p.id}
+                    className="flex min-h-52 flex-col justify-between border-[var(--border)] bg-white p-5"
                   >
-                    {isLoading === 'PRO' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Upgrade to Pro'}
-                  </button>
-                </SpotlightCard>
-              )}
-              {currentPlan !== 'ENTERPRISE' && (
-                <SpotlightCard className="flex h-56 flex-col justify-between border-[var(--border)] bg-white p-5">
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-xs font-bold text-teal-800">Enterprise</span>
-                      <span className="text-xs font-bold">$99/mo</span>
+                    <div className="space-y-2">
+                      <div className="flex justify-between gap-2">
+                        <span
+                          className={`text-xs font-bold ${isFree ? 'text-[var(--muted)]' : 'text-teal-800'}`}
+                        >
+                          {p.name}
+                        </span>
+                        <span className="text-xs font-bold">${p.priceMonthly}/mo</span>
+                      </div>
+                      <p className="text-[11px] text-[var(--muted)]">
+                        {p.blurb || 'Subscription plan managed by PropIntel admin.'}
+                      </p>
+                      {!isFree && stripeConfigured && (
+                        <p className="text-[10px] font-semibold text-teal-800">
+                          Secured by Stripe Checkout
+                        </p>
+                      )}
                     </div>
-                    <p className="text-[11px] text-[var(--muted)]">{PLAN_META.ENTERPRISE.blurb}</p>
-                  </div>
-                  <button
-                    onClick={() => handleSwitchPlan('ENTERPRISE')}
-                    disabled={isLoading !== null}
-                    className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#0e1a16] py-2.5 text-xs font-bold text-foreground disabled:opacity-50"
-                  >
-                    {isLoading === 'ENTERPRISE' ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      'Subscribe to Enterprise'
-                    )}
-                  </button>
-                </SpotlightCard>
-              )}
-              {currentPlan !== 'FREE' && (
-                <div className="glass-card flex h-56 flex-col justify-between rounded-2xl border border-[var(--border)] bg-white p-5">
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-xs font-bold text-[var(--muted)]">Free Starter</span>
-                      <span className="text-xs font-bold">$0/mo</span>
-                    </div>
-                    <p className="text-[11px] text-[var(--muted-foreground)]">{PLAN_META.FREE.blurb}</p>
-                  </div>
-                  <button
-                    onClick={() => handleSwitchPlan('FREE')}
-                    disabled={isLoading !== null}
-                    className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] py-2.5 text-xs text-[var(--muted)] disabled:opacity-50"
-                  >
-                    {isLoading === 'FREE' ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      'Cancel Plan / Downgrade'
-                    )}
-                  </button>
-                </div>
-              )}
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchPlan(p.code)}
+                      disabled={isLoading !== null}
+                      className={
+                        isFree
+                          ? 'flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] py-2.5 text-xs font-bold text-[var(--muted)] disabled:opacity-50'
+                          : `${isDark ? 'btn-ink' : 'btn-primary'} flex w-full cursor-pointer items-center justify-center gap-2 py-2.5 text-xs disabled:opacity-50`
+                      }
+                    >
+                      {isLoading === p.code ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : isFree ? (
+                        'Downgrade to Free'
+                      ) : stripeConfigured ? (
+                        `Subscribe to ${p.name}`
+                      ) : (
+                        `Switch to ${p.name}`
+                      )}
+                    </button>
+                  </SpotlightCard>
+                );
+              })}
             </div>
           </div>
 
@@ -201,7 +264,7 @@ export default function BillingPage() {
             <h3 className="mb-4 text-sm font-bold">Order & invoice history</h3>
             {orders.length === 0 ? (
               <p className="text-xs text-[var(--muted)]">
-                No invoices yet. Plan changes will appear here automatically.
+                No invoices yet. Plan changes and Stripe payments appear here automatically.
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -235,14 +298,25 @@ export default function BillingPage() {
                           </span>
                         </td>
                         <td className="py-3 pl-3 text-right">
-                          <button
-                            type="button"
-                            className="inline-flex cursor-pointer items-center gap-1 text-[var(--muted)] hover:text-foreground"
-                            onClick={() => window.print()}
-                            title="Download receipt"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" /> Receipt
-                          </button>
+                          {o.receiptUrl ? (
+                            <a
+                              href={o.receiptUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[var(--muted)] hover:text-foreground"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" /> Receipt
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              className="inline-flex cursor-pointer items-center gap-1 text-[var(--muted)] hover:text-foreground"
+                              onClick={() => window.print()}
+                              title="Print receipt"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" /> Receipt
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -255,16 +329,60 @@ export default function BillingPage() {
 
         <div className="space-y-6 lg:col-span-4">
           <SpotlightCard className="space-y-3 p-5">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
-              Payment details
+            <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
+              <CreditCard className="h-3.5 w-3.5" /> Payment method
             </h3>
-            <p className="text-xs text-[var(--muted)]">
-              Sandbox mode — no live card on file. Billing email uses your account email. Connect
-              Stripe keys to enable real payment methods and tax IDs.
-            </p>
+            {stripeConfigured ? (
+              <>
+                <p className="text-xs text-[var(--muted)]">
+                  Card updates, invoices, and cancellations are handled in the Stripe Customer Portal.
+                </p>
+                <button
+                  type="button"
+                  onClick={handlePortal}
+                  disabled={portalLoading || !hasStripeCustomer}
+                  className="btn-primary flex w-full cursor-pointer items-center justify-center gap-2 py-2.5 text-xs disabled:opacity-50"
+                >
+                  {portalLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      Manage billing in Stripe <ExternalLink className="h-3.5 w-3.5" />
+                    </>
+                  )}
+                </button>
+                {!hasStripeCustomer && (
+                  <p className="text-[10px] text-[var(--muted)]">
+                    Subscribe to a paid plan first to create your Stripe customer profile.
+                  </p>
+                )}
+              </>
+            ) : (
+              <div className="flex gap-2 rounded-xl border border-amber-500/30 bg-amber-50 p-3 text-xs text-amber-900">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Stripe credentials are not in .env yet. Paid plan switches activate locally for
+                  development; add keys to enable live Checkout.
+                </span>
+              </div>
+            )}
           </SpotlightCard>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BillingPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="flex justify-center py-20 text-[var(--muted)]">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      }
+    >
+      <BillingPageInner />
+    </React.Suspense>
   );
 }

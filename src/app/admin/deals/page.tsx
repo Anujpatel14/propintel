@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, MapPin } from 'lucide-react';
 import SpotlightCard from '@/components/ui/SpotlightCard';
+import PageHeader from '@/components/dashboard/PageHeader';
 import { getAdminDealIntelligence } from '@/app/actions/adminExpandActions';
 
 export default function AdminDealsPage() {
@@ -42,13 +43,11 @@ export default function AdminDealsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="font-display text-3xl tracking-tight">Deal flow & market intelligence</h1>
-        <p className="text-sm text-[var(--muted)]">
-          Platform-wide underwriting activity and top markets.
-        </p>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Deal flow & market intelligence"
+        description="Platform-wide underwriting activity and top markets."
+      />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <SpotlightCard className="p-5">
@@ -80,30 +79,32 @@ export default function AdminDealsPage() {
         {data.topMarkets.length === 0 ? (
           <p className="text-xs text-[var(--muted)]">No analyses yet.</p>
         ) : (
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)] uppercase">
-                <th className="py-2">Market</th>
-                <th className="px-3 py-2">Deals</th>
-                <th className="px-3 py-2">Avg cap</th>
-                <th className="px-3 py-2">Avg ROI</th>
-                <th className="py-2">Volume</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)]">
-              {data.topMarkets.map((m) => (
-                <tr key={m.market}>
-                  <td className="py-2.5 font-semibold">{m.market}</td>
-                  <td className="px-3 py-2.5">{m.deals}</td>
-                  <td className="px-3 py-2.5">{m.avgCapRate.toFixed(2)}%</td>
-                  <td className="px-3 py-2.5">{m.avgRoi.toFixed(2)}%</td>
-                  <td className="py-2.5 font-bold text-teal-800">
-                    ${m.volume.toLocaleString()}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] text-left text-xs">
+              <thead>
+                <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)] uppercase">
+                  <th className="py-2">Market</th>
+                  <th className="px-3 py-2">Deals</th>
+                  <th className="px-3 py-2">Avg cap</th>
+                  <th className="px-3 py-2">Avg ROI</th>
+                  <th className="py-2">Volume</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {data.topMarkets.map((m) => (
+                  <tr key={m.market}>
+                    <td className="py-2.5 font-semibold">{m.market}</td>
+                    <td className="px-3 py-2.5">{m.deals}</td>
+                    <td className="px-3 py-2.5">{m.avgCapRate.toFixed(2)}%</td>
+                    <td className="px-3 py-2.5">{m.avgRoi.toFixed(2)}%</td>
+                    <td className="py-2.5 font-bold text-teal-800">
+                      ${m.volume.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

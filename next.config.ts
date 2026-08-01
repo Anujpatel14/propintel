@@ -1,7 +1,7 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // src/instrumentation.ts registers uncaughtException / unhandledRejection loggers
 };
 
 export default nextConfig;

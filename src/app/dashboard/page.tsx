@@ -12,6 +12,7 @@ import {
   PlusCircle,
 } from 'lucide-react';
 import { AreaChart } from '@/components/ui/Charts';
+import PageHeader from '@/components/dashboard/PageHeader';
 import SpotlightCard from '@/components/ui/SpotlightCard';
 
 const WEALTH_PROJECTION = [
@@ -65,19 +66,15 @@ const KPIS = [
 export default function DashboardOverviewPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-8">
-      <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-        <div>
-          <h1 className="font-display text-3xl tracking-tight text-foreground md:text-4xl">
-            Investor dashboard
-          </h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Portfolio pulse, pipeline health, and underwriting shortcuts.
-          </p>
-        </div>
-        <Link href="/dashboard/analyzer" className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm">
-          <Plus className="h-4 w-4" /> New underwrite
-        </Link>
-      </div>
+      <PageHeader
+        title="Investor dashboard"
+        description="Portfolio pulse, pipeline health, and underwriting shortcuts."
+        actions={
+          <Link href="/dashboard/analyzer" className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm">
+            <Plus className="h-4 w-4" /> New underwrite
+          </Link>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {KPIS.map((kpi, i) => {

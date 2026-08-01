@@ -251,6 +251,19 @@ export async function deleteCmsContent(id: string) {
 export async function getAdminCoachingSessions() {
   await requireAdmin();
 
+  // Expire past-day sessions before listing
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  await withDbRetry(() =>
+    prisma.coaching.updateMany({
+      where: {
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        bookingDate: { lt: start },
+      },
+      data: { status: 'EXPIRED' },
+    })
+  );
+
   const sessions = await withDbRetry(() =>
     prisma.coaching.findMany({
       include: { user: { select: { email: true, name: true } } },
@@ -263,7 +276,12 @@ export async function getAdminCoachingSessions() {
 
 export async function updateAdminCoachingSession(
   id: string,
-  data: { status?: string; meetingLink?: string; coachName?: string; notes?: string }
+  data: {
+    status?: string;
+    meetingLink?: string;
+    coachName?: string;
+    notes?: string;
+  }
 ) {
   await requireAdmin();
 
@@ -278,16 +296,49 @@ export async function updateAdminCoachingSession(
   return { success: true, session };
 }
 
-export async function getAdminAuditLogs() {
+export async function getAdminAuditLogs(filters?: { search?: string; take?: number }) {
   await requireAdmin();
 
+  const take = filters?.take ?? 200;
   const logs = await withDbRetry(() =>
     prisma.activityLog.findMany({
-      take: 100,
+      take,
       orderBy: { createdAt: 'desc' },
-      include: { user: { select: { email: true, name: true } } },
+      include: { user: { select: { email: true, name: true, role: true } } },
     })
   );
 
-  return { success: true, logs };
+  return { success: true as const, logs };
+}
+
+/**
+ * Request / error / system diagnostics from day-wise log files (not the database).
+ */
+export async function getAdminSystemLogs(filters?: {
+  dayKey?: string;
+  level?: string;
+  category?: string;
+  search?: string;
+  take?: number;
+}) {
+  await requireAdmin();
+
+  const { listLogDays, readDayLogs, dayKeyFrom } = await import('@/lib/logger');
+  const dayKey = filters?.dayKey || dayKeyFrom();
+  const [logs, days] = await Promise.all([
+    readDayLogs({
+      dayKey,
+      level: filters?.level,
+      category: filters?.category,
+      search: filters?.search,
+      take: filters?.take ?? 250,
+    }),
+    listLogDays(),
+  ]);
+
+  return {
+    success: true as const,
+    logs,
+    days,
+  };
 }

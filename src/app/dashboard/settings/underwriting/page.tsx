@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { Loader2, Check, Calculator, FileText } from 'lucide-react';
 import {
   getUnderwritingSettings,
   updateUnderwritingSettings,
 } from '@/app/actions/settingsActions';
+import PageHeader from '@/components/dashboard/PageHeader';
+import SettingsTabs from '@/components/dashboard/SettingsTabs';
 
 export default function UnderwritingSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -75,40 +76,28 @@ export default function UnderwritingSettingsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20 text-[var(--muted)]">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading defaults…
+      <div className="mx-auto max-w-7xl space-y-8">
+        <PageHeader
+          title="Underwriting preferences"
+          description="Default assumptions and branded PDF export settings."
+          actions={<SettingsTabs />}
+        />
+        <div className="flex items-center justify-center py-20 text-[var(--muted)]">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading defaults…
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
-      <div className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-display text-3xl tracking-tight md:text-4xl">
-            Underwriting preferences
-          </h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Default assumptions and branded PDF export settings.
-          </p>
-        </div>
-        <div className="flex gap-2 text-xs">
-          <Link
-            href="/dashboard/settings/profile"
-            className="rounded-lg border border-[var(--border)] px-3 py-2 font-semibold text-[var(--muted)] hover:bg-white"
-          >
-            Profile
-          </Link>
-          <Link
-            href="/dashboard/settings/underwriting"
-            className="rounded-lg bg-teal-700 px-3 py-2 font-bold text-white"
-          >
-            Underwriting
-          </Link>
-        </div>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Underwriting preferences"
+        description="Default assumptions and branded PDF export settings."
+        actions={<SettingsTabs />}
+      />
 
-      <form onSubmit={handleSave} className="space-y-6">
+      <form onSubmit={handleSave} className="mx-auto max-w-3xl space-y-6">
         <div className="surface-card space-y-5 p-6">
           <h2 className="flex items-center gap-2 text-sm font-bold">
             <Calculator className="h-4 w-4 text-teal-700" /> Default assumptions

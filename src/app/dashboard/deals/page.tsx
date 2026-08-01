@@ -9,6 +9,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import SpotlightCard from '@/components/ui/SpotlightCard';
+import PageHeader from '@/components/dashboard/PageHeader';
 import { getUserAnalyses, deleteAnalysis } from '@/app/actions/analysisActions';
 
 interface SavedDeal {
@@ -112,24 +113,20 @@ export default function SavedDealsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
-      <div className="flex flex-col items-start justify-between gap-4 border-b border-[var(--border)] pb-6 md:flex-row md:items-center">
-        <div>
-          <h1 className="text-2xl font-extrabold text-foreground md:text-3xl">
-            Saved Deals Database
-          </h1>
-          <p className="text-sm text-[var(--muted)]">
-            Search historical calculations, compare yields, and manage archives.
-          </p>
-        </div>
-        {selectedIds.length >= 2 && (
-          <button
-            onClick={() => setShowComparison(true)}
-            className="flex cursor-pointer items-center gap-2 rounded-xl bg-[#0e1a16] px-4 py-2.5 text-sm font-bold text-foreground shadow-lg transition-all hover:bg-teal-900"
-          >
-            <ArrowRightLeft className="h-4 w-4" /> Compare Selected ({selectedIds.length})
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Saved deals database"
+        description="Search historical calculations, compare yields, and manage archives."
+        actions={
+          selectedIds.length >= 2 ? (
+            <button
+              onClick={() => setShowComparison(true)}
+              className="btn-ink inline-flex cursor-pointer items-center gap-2 px-4 py-2.5 text-sm"
+            >
+              <ArrowRightLeft className="h-4 w-4" /> Compare Selected ({selectedIds.length})
+            </button>
+          ) : undefined
+        }
+      />
 
       <div className="relative max-w-md">
         <Search className="absolute top-3 left-3 h-4 w-4 text-[var(--muted-foreground)]" />
@@ -166,13 +163,15 @@ export default function SavedDealsPage() {
                       <span className="rounded bg-[var(--surface-soft)] px-2 py-0.5 text-[9px] font-bold text-[var(--muted)] uppercase">
                         {deal.type}
                       </span>
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => handleSelectDeal(deal.id)}
-                        className="h-3.5 w-3.5 rounded border-[var(--border)] accent-emerald-500"
-                      />
-                      <span className="text-[10px] text-[var(--muted-foreground)]">Compare</span>
+                      <label className="inline-flex min-h-11 cursor-pointer items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleSelectDeal(deal.id)}
+                          className="h-4 w-4 rounded border-[var(--border)] accent-teal-700"
+                        />
+                        <span className="text-xs text-[var(--muted-foreground)]">Compare</span>
+                      </label>
                     </div>
                     <h3 className="mt-1 text-sm leading-snug font-bold text-foreground">
                       {deal.address}
@@ -234,8 +233,14 @@ export default function SavedDealsPage() {
       )}
 
       {showComparison && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-6 backdrop-blur-sm">
-          <div className="glass-panel relative w-full max-w-4xl space-y-6 rounded-2xl border border-[var(--border)] p-8">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-md sm:p-6"
+          onClick={() => setShowComparison(false)}
+        >
+          <div
+            className="glass-panel relative max-h-[90dvh] w-full max-w-4xl space-y-6 overflow-y-auto rounded-2xl border border-[var(--border)] p-6 sm:p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-4">
               <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
                 <ArrowRightLeft className="h-5 w-5 text-teal-800" /> Side-by-Side Comparison Matrix
@@ -262,7 +267,7 @@ export default function SavedDealsPage() {
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className="divide-y divide-[var(--border)]">
                   <tr>
                     <td className="py-3 text-xs font-medium text-[var(--muted)] uppercase">
                       Calculation Model
@@ -338,7 +343,7 @@ export default function SavedDealsPage() {
             <div className="flex justify-end border-t border-[var(--border)] pt-4">
               <button
                 onClick={() => setShowComparison(false)}
-                className="cursor-pointer rounded-xl bg-teal-700 px-6 py-2.5 text-xs font-bold text-white transition-all hover:bg-teal-600"
+                className="btn-primary cursor-pointer px-6 py-2.5 text-xs"
               >
                 Close Comparison
               </button>

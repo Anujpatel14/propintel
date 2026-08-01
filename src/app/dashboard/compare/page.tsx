@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRightLeft, Loader2, Check } from 'lucide-react';
 import { getUserAnalyses } from '@/app/actions/analysisActions';
+import PageHeader from '@/components/dashboard/PageHeader';
 
 interface CompareDeal {
   id: string;
@@ -101,23 +102,27 @@ export default function CompareDealsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20 text-[var(--muted)]">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading deals…
+      <div className="mx-auto max-w-7xl space-y-8">
+        <PageHeader
+          title="Deal comparison matrix"
+          description="Compare up to 4 saved analyses side-by-side. Best metrics highlight in green."
+        />
+        <div className="flex items-center justify-center py-20 text-[var(--muted)]">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading deals…
+        </div>
       </div>
     );
   }
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
-      <div className="border-b border-[var(--border)] pb-6">
-        <h1 className="font-display text-3xl tracking-tight md:text-4xl">Deal comparison matrix</h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Compare up to 4 saved analyses side-by-side. Best metrics highlight in green.
-        </p>
-      </div>
+      <PageHeader
+        title="Deal comparison matrix"
+        description="Compare up to 4 saved analyses side-by-side. Best metrics highlight in green."
+      />
 
       {deals.length === 0 ? (
-        <div className="rounded-xl border border-[var(--border)] bg-white py-16 text-center text-sm text-[var(--muted)]">
+        <div className="surface-card py-16 text-center text-sm text-[var(--muted)]">
           Save analyses in the Property Analyzer first, then compare them here.
         </div>
       ) : (

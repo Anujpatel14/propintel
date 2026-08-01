@@ -2,13 +2,32 @@
 
 import { prisma, withDbRetry } from '@/lib/db';
 import { requireAuth } from '@/lib/services/auth';
-import { revalidatePath } from 'next/cache';
+import { ensureDefaultPlans } from './planActions';
 
-const PLAN_PRICES: Record<string, number> = {
-  FREE: 0,
-  PRO: 49,
-  ENTERPRISE: 99,
-};
+export async function recordPlanOrder(planCode: string) {
+  const user = await requireAuth();
+  await ensureDefaultPlans();
+
+  const catalog = await withDbRetry(() =>
+    prisma.subscriptionPlan.findUnique({ where: { code: planCode } })
+  );
+  const amount = catalog?.priceMonthly ?? 0;
+
+  const order = await withDbRetry(() =>
+    prisma.order.create({
+      data: {
+        userId: user.id,
+        amount,
+        plan: planCode,
+        description: `${catalog?.name || planCode} Plan Monthly`,
+        status: 'COMPLETED',
+        receiptUrl: `/dashboard/billing?receipt=${Date.now()}`,
+      },
+    })
+  );
+
+  return { success: true as const, order };
+}
 
 export async function getUserOrders() {
   const user = await requireAuth();
@@ -20,27 +39,5 @@ export async function getUserOrders() {
     })
   );
 
-  return { success: true, orders };
-}
-
-export async function recordPlanOrder(plan: 'FREE' | 'PRO' | 'ENTERPRISE') {
-  const user = await requireAuth();
-  const amount = PLAN_PRICES[plan] ?? 0;
-
-  const order = await withDbRetry(() =>
-    prisma.order.create({
-      data: {
-        userId: user.id,
-        amount,
-        plan,
-        description: `${plan} Plan Monthly`,
-        status: amount === 0 ? 'COMPLETED' : 'PAID',
-        stripeInvoiceId: `inv_sim_${Math.random().toString(36).slice(2, 10)}`,
-        receiptUrl: '#',
-      },
-    })
-  );
-
-  revalidatePath('/dashboard/billing');
-  return { success: true, order };
+  return { success: true as const, orders };
 }

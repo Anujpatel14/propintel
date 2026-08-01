@@ -16,6 +16,7 @@ import { lookupProperty } from '@/lib/services/properties';
 import { analyzeDeal } from '@/lib/services/ai';
 import { exportToPDF } from '@/lib/services/reports';
 import { savePropertyAnalysis, saveFlipAnalysis } from '@/app/actions/analysisActions';
+import PageHeader from '@/components/dashboard/PageHeader';
 import SpotlightCard from '@/components/ui/SpotlightCard';
 
 type ModelType = 'hold' | 'flip' | 'rental';
@@ -251,54 +252,53 @@ export default function PropertyAnalyzerPage() {
   };
 
   const tabs: { id: ModelType; label: string }[] = [
-    { id: 'hold', label: 'Buy & Hold' },
-    { id: 'flip', label: 'Fix & Flip' },
-    { id: 'rental', label: 'Rental L/T' },
+    { id: 'hold', label: 'Buy & Hold', short: 'Hold' },
+    { id: 'flip', label: 'Fix & Flip', short: 'Flip' },
+    { id: 'rental', label: 'Rental L/T', short: 'Rental' },
   ];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-7">
-      <div className="flex flex-col items-start justify-between gap-4 border-b border-[var(--border)] pb-6 md:flex-row md:items-center">
-        <div>
-          <h1 className="font-display text-3xl tracking-tight md:text-4xl">Property analyzer</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Underwrite cash flow, flips, and long-term rental growth.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={handleExportPDF}
-            className="btn-secondary inline-flex items-center gap-2 px-4 py-2.5 text-xs"
-          >
-            <FileText className="h-4 w-4 text-teal-700" /> Export PDF
-          </button>
-          <button
-            onClick={handleSaveDeal}
-            disabled={isSaving}
-            className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-xs disabled:opacity-50"
-          >
-            {isSaving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : saveSuccess ? (
-              <Check className="h-4 w-4" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
-            {saveSuccess ? 'Saved' : 'Save deal'}
-          </button>
-        </div>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Property analyzer"
+        description="Underwrite cash flow, flips, and long-term rental growth."
+        actions={
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <button
+              onClick={handleExportPDF}
+              className="btn-secondary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs"
+            >
+              <FileText className="h-4 w-4 text-teal-700" /> Export PDF
+            </button>
+            <button
+              onClick={handleSaveDeal}
+              disabled={isSaving}
+              className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs disabled:opacity-50"
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : saveSuccess ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              {saveSuccess ? 'Saved' : 'Save deal'}
+            </button>
+          </div>
+        }
+      />
 
-      <div className="relative flex max-w-lg rounded-xl border border-[var(--border)] bg-white p-1">
+      <div className="relative flex w-full max-w-lg overflow-x-auto rounded-xl border border-[var(--border)] bg-white p-1">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setModelType(tab.id)}
-            className={`relative z-10 flex-1 rounded-lg py-2.5 text-xs font-bold transition ${
+            className={`relative z-10 min-w-[5.5rem] flex-1 rounded-lg py-2.5 text-xs font-bold transition ${
               modelType === tab.id ? 'text-teal-50' : 'text-[var(--muted)] hover:text-foreground'
             }`}
           >
-            {tab.label}
+            <span className="sm:hidden">{tab.short}</span>
+            <span className="hidden sm:inline">{tab.label}</span>
           </button>
         ))}
         <div
@@ -339,7 +339,7 @@ export default function PropertyAnalyzerPage() {
         <button
           onClick={handlePropertyLookup}
           disabled={isSearching}
-          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#0e1a16] px-5 py-3.5 text-xs font-bold text-white transition hover:bg-teal-900 disabled:opacity-50"
+              className="btn-ink inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 px-5 py-3.5 text-xs disabled:opacity-50"
         >
           {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
           Lookup comps
@@ -474,7 +474,7 @@ export default function PropertyAnalyzerPage() {
             <button
               onClick={handleAIAnalysis}
               disabled={isAnalyzing}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0e1a16] py-3 text-xs font-bold text-white transition hover:bg-teal-900 disabled:opacity-50"
+              className="btn-ink flex w-full cursor-pointer items-center justify-center gap-2 py-3 text-xs disabled:opacity-50"
             >
               {isAnalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cpu className="h-4 w-4" />}
               {isAnalyzing ? 'Underwriting…' : 'Run AI deal analysis'}

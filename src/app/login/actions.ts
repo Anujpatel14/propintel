@@ -1,25 +1,20 @@
 'use server';
 
-import { signInMockUser, signOutMockUser } from '@/lib/services/auth';
-import { redirect } from 'next/navigation';
+import { getCurrentUser } from '@/lib/services/auth';
+import { recordAudit } from '@/lib/logger';
 
-export async function loginUserAction(email: string) {
-  const normalized = email.trim().toLowerCase();
-  const session = await signInMockUser(normalized);
-  if (!session) {
-    throw new Error(
-      'Use a sandbox profile: investor@propintel.com or admin@propintel.com (custom emails need Clerk).'
-    );
+/** Record logout audit before client-side Clerk signOut. */
+export async function recordLogoutAuditAction() {
+  try {
+    const user = await getCurrentUser();
+    if (user) {
+      await recordAudit({
+        userId: user.id,
+        action: 'LOGOUT',
+        details: 'Signed out via Clerk',
+      });
+    }
+  } catch {
+    // ignore
   }
-
-  if (session.role === 'ADMIN') {
-    redirect('/admin');
-  } else {
-    redirect('/dashboard');
-  }
-}
-
-export async function logoutUserAction() {
-  await signOutMockUser();
-  redirect('/login');
 }

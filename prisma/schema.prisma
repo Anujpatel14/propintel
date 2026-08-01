@@ -15,7 +15,7 @@ enum Role {
 
 model User {
   id                String             @id @default(uuid())
-  clerkId           String             @unique
+  clerkId           String?            @unique
   name              String?
   email             String             @unique
   role              Role               @default(INVESTOR)
@@ -32,6 +32,7 @@ model User {
   coachings         Coaching[]
   activities        ActivityLog[]
   orders            Order[]
+  paymentEvents     PaymentEvent[]
 }
 
 model Profile {
@@ -55,10 +56,26 @@ model Subscription {
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   stripeCustomerId     String?
   stripeSubscriptionId String?
-  plan                 String   @default("FREE") // e.g., "FREE", "PRO", "ENTERPRISE"
+  plan                 String   @default("FREE") // matches SubscriptionPlan.code
   status               String   @default("INACTIVE") // e.g., "ACTIVE", "PAST_DUE", "CANCELED"
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
+}
+
+model SubscriptionPlan {
+  id                 String   @id @default(uuid())
+  code               String   @unique // FREE, PRO, ENTERPRISE, or custom
+  name               String
+  priceMonthly       Float    @default(0)
+  priceAnnual        Float?
+  blurb              String?
+  features           String? // newline-separated feature list
+  isActive           Boolean  @default(true)
+  sortOrder          Int      @default(0)
+  stripePriceMonthly String?
+  stripePriceAnnual  String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 model UserSettings {
@@ -88,10 +105,32 @@ model Order {
   currency        String   @default("USD")
   plan            String
   description     String?
-  status          String   @default("COMPLETED") // COMPLETED, FAILED, REFUNDED, PAID
+  status          String   @default("COMPLETED") // COMPLETED, FAILED, REFUNDED, PAID, PENDING
   stripeInvoiceId String?
+  stripePaymentId String?
   receiptUrl      String?
   createdAt       DateTime @default(now())
+}
+
+/// Stripe / billing operational events for admin diagnostics
+model PaymentEvent {
+  id              String   @id @default(uuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type            String // CHECKOUT_CREATED, CHECKOUT_COMPLETED, INVOICE_PAID, INVOICE_FAILED, REFUND, PORTAL, WEBHOOK
+  status          String   @default("OK") // OK, FAILED, PENDING
+  amount          Float?
+  currency        String?  @default("USD")
+  plan            String?
+  stripeEventId   String?  @unique
+  stripeObjectId  String?
+  description     String?
+  meta            String?  @db.Text
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([type])
+  @@index([status])
 }
 
 model CMSContent {
@@ -184,17 +223,18 @@ model DealPipeline {
 }
 
 model Coaching {
-  id            String   @id @default(uuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bookingDate   DateTime
-  status        String   @default("PENDING") // "PENDING", "CONFIRMED", "COMPLETED", "CANCELED"
-  meetingLink   String?
-  paymentStatus String   @default("UNPAID") // "PAID", "UNPAID"
-  coachName     String?
-  topic         String?
-  notes         String?
-  createdAt     DateTime @default(now())
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookingDate     DateTime
+  status          String   @default("PENDING") // PENDING, CONFIRMED, COMPLETED, CANCELED, EXPIRED
+  meetingLink     String?
+  calendarEventId String?
+  paymentStatus   String   @default("UNPAID") // PAID, UNPAID
+  coachName       String?
+  topic           String?
+  notes           String?
+  createdAt       DateTime @default(now())
 }
 
 model ActivityLog {
@@ -204,4 +244,7 @@ model ActivityLog {
   action    String // "LOGIN", "CREATE_ANALYSIS", "EXPORT_REPORT", "UPDATE_SUBSCRIPTION", etc.
   details   String?
   createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, action])
 }
