@@ -34,6 +34,8 @@ model User {
   orders            Order[]
   paymentEvents     PaymentEvent[]
   aiDealAnalyses    AiDealAnalysis[]
+  properties        Property[]
+  reports           Report[]
 }
 
 model Profile {
@@ -177,6 +179,9 @@ model PropertyAnalysis {
   aiVerdict       String?
   aiHeadline      String?
   aiPayloadJson   String? // summary, strengths, risks, provider, reportText
+  isFavorite      Boolean  @default(false)
+  isArchived      Boolean  @default(false)
+  deletedAt       DateTime?
   createdAt       DateTime @default(now())
 }
 
@@ -197,6 +202,9 @@ model FlipAnalysis {
   aiVerdict     String?
   aiHeadline    String?
   aiPayloadJson String?
+  isFavorite    Boolean  @default(false)
+  isArchived    Boolean  @default(false)
+  deletedAt     DateTime?
   createdAt     DateTime @default(now())
 }
 
@@ -258,6 +266,59 @@ model ActivityLog {
 
   @@index([createdAt])
   @@index([userId, action])
+}
+
+/**
+ * Investor-owned property inventory (imported from ATTOM or entered manually).
+ * After import, Analyzer / AI / CRM use this row — not live ATTOM responses.
+ */
+model Property {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attomId         String?
+  address         String
+  city            String
+  state           String
+  zip             String
+  latitude        Float?
+  longitude       Float?
+  propertyType    String?
+  bedrooms        Float?
+  bathrooms       Float?
+  yearBuilt       Int?
+  squareFeet      Float?
+  lotSize         Float?
+  estimatedValue  Float?
+  estimatedRent   Float?
+  taxAmount       Float?
+  apn             String?
+  ownerOccupied   Boolean?
+  notes           String?  @db.Text
+  rawJson         String?  @db.Text
+  source          String   @default("ATTOM") // ATTOM | MANUAL | CSV | MLS
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, attomId])
+  @@index([userId, createdAt])
+  @@index([zip])
+}
+
+/** Generated / downloaded investor reports */
+model Report {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String // FINANCIAL | PROPERTY | RENTAL | FLIP | PORTFOLIO
+  title       String
+  address     String?
+  status      String   @default("READY") // READY | FAILED
+  payloadJson String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, type])
 }
 
 /** Saved AI / rule-engine underwriting verdicts for the deal analyzer */

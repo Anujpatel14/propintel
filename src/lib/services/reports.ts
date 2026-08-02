@@ -1,156 +1,124 @@
 /**
- * Exports property analysis data as a PDF report.
- * Formats a clean, print-optimized document and calls the browser print engine.
+ * Client-side PDF download (real .pdf file — not print / about:blank).
  */
-export function exportToPDF(data: {
+import { jsPDF } from 'jspdf';
+
+export type PdfReportData = {
   address: string;
   type: string;
   metrics: { label: string; value: string | number }[];
   inputs: { label: string; value: string | number }[];
-  aiAnalysis: string;
-}) {
+  aiAnalysis?: string;
+};
+
+function safeFileName(s: string) {
+  return s.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 60) || 'report';
+}
+
+export function exportToPDF(data: PdfReportData) {
   if (typeof window === 'undefined') return;
 
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    alert('Please allow popups to export the PDF report.');
-    return;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  const margin = 48;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = margin;
+
+  const ensureSpace = (need: number) => {
+    if (y + need > doc.internal.pageSize.getHeight() - margin) {
+      doc.addPage();
+      y = margin;
+    }
+  };
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.setTextColor(15, 23, 42);
+  doc.text('PropIntel Report', margin, y);
+  y += 22;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.setTextColor(71, 85, 105);
+  doc.text(data.address, margin, y);
+  y += 16;
+  doc.setFontSize(10);
+  doc.text(`${data.type} · ${new Date().toLocaleString()}`, margin, y);
+  y += 28;
+
+  doc.setDrawColor(15, 118, 110);
+  doc.setLineWidth(2);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 24;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Key metrics', margin, y);
+  y += 18;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  for (const m of data.metrics) {
+    ensureSpace(18);
+    doc.setTextColor(100, 116, 139);
+    doc.text(m.label, margin, y);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('helvetica', 'bold');
+    doc.text(String(m.value), pageWidth - margin, y, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    y += 18;
   }
 
-  // Parse markdown-like bullets in AI Analysis to HTML bullets:
-  const formattedAI = data.aiAnalysis
-    .replace(/## (.*)/g, '<h2>$1</h2>')
-    .replace(/### (.*)/g, '<h3>$1</h3>')
-    .replace(/\* \*\*(.*?)\*\*:(.*)/g, '<li><strong>$1:</strong>$2</li>')
-    .replace(/\* (.*)/g, '<li>$1</li>')
-    .replace(/\n\n/g, '<br/>')
-    .replace(/---/g, '<hr style="border-color: #e5e7eb; margin: 1.5rem 0;" />');
+  y += 12;
+  ensureSpace(40);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text('Inputs', margin, y);
+  y += 18;
 
-  const metricsHtml = data.metrics
-    .map(
-      m => `
-      <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 1rem; border-radius: 0.5rem; text-align: center;">
-        <span style="font-size: 0.85rem; color: #6b7280; text-transform: uppercase; font-weight: 600;">${m.label}</span>
-        <div style="font-size: 1.5rem; color: #047857; font-weight: 700; margin-top: 0.25rem;">${m.value}</div>
-      </div>
-    `
-    )
-    .join('');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  for (const i of data.inputs) {
+    ensureSpace(18);
+    doc.setTextColor(100, 116, 139);
+    doc.text(i.label, margin, y);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('helvetica', 'bold');
+    const val =
+      typeof i.value === 'number' ? `$${Math.round(i.value).toLocaleString()}` : String(i.value);
+    doc.text(val, pageWidth - margin, y, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    y += 18;
+  }
 
-  const inputsHtml = data.inputs
-    .map(
-      i => `
-      <tr style="border-bottom: 1px solid #e5e7eb;">
-        <td style="padding: 0.75rem 0; color: #4b5563; font-weight: 500;">${i.label}</td>
-        <td style="padding: 0.75rem 0; text-align: right; color: #111827; font-weight: 600;">${i.value}</td>
-      </tr>
-    `
-    )
-    .join('');
+  if (data.aiAnalysis?.trim()) {
+    y += 14;
+    ensureSpace(60);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Notes / AI summary', margin, y);
+    y += 16;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(51, 65, 85);
+    const lines = doc.splitTextToSize(data.aiAnalysis.replace(/\s+/g, ' ').trim(), pageWidth - margin * 2);
+    for (const line of lines) {
+      ensureSpace(14);
+      doc.text(line, margin, y);
+      y += 14;
+    }
+  }
 
-  printWindow.document.write(`
-    <html>
-      <head>
-        <title>PropIntel Report - ${data.address}</title>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-          body {
-            font-family: 'Inter', sans-serif;
-            color: #111827;
-            margin: 0;
-            padding: 2rem;
-            line-height: 1.5;
-          }
-          h1, h2, h3 { color: #0f172a; margin-top: 0; }
-          .header {
-            border-bottom: 3px solid #10b981;
-            padding-bottom: 1rem;
-            margin-bottom: 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-          }
-          .title { font-size: 1.8rem; font-weight: 700; color: #0f172a; }
-          .subtitle { font-size: 1rem; color: #6b7280; margin-top: 0.25rem; }
-          .badge {
-            background: #d1fae5;
-            color: #065f46;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-weight: 600;
-            font-size: 0.85rem;
-            text-transform: uppercase;
-          }
-          .grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
-            margin-bottom: 2rem;
-          }
-          .table-container {
-            margin-bottom: 2rem;
-          }
-          .table {
-            width: 100%;
-            border-collapse: collapse;
-          }
-          .ai-box {
-            background: #f0fdf4;
-            border: 1px solid #bcf0da;
-            padding: 1.5rem;
-            border-radius: 0.5rem;
-            margin-top: 2rem;
-          }
-          .ai-box h2, .ai-box h3 { color: #065f46; }
-          .ai-box li { margin-bottom: 0.5rem; }
-          @media print {
-            body { padding: 0; }
-            .no-print { display: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <div class="title">PropIntel Real Estate Report</div>
-            <div class="subtitle">${data.address}</div>
-          </div>
-          <div>
-            <span class="badge">${data.type} Analysis</span>
-          </div>
-        </div>
+  y += 28;
+  ensureSpace(24);
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.text(
+    'Generated by PropIntel. Projections are estimates and not guarantees.',
+    margin,
+    y
+  );
 
-        <h2>Key Financial Metrics</h2>
-        <div class="grid">
-          ${metricsHtml}
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 2rem;">
-          <div class="table-container">
-            <h2>Detailed Cost & Expenses</h2>
-            <table class="table">
-              ${inputsHtml}
-            </table>
-          </div>
-          
-          <div class="ai-box">
-            ${formattedAI}
-          </div>
-        </div>
-
-        <div style="margin-top: 3rem; text-align: center; font-size: 0.8rem; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 1rem;">
-          Report generated by PropIntel platform. Values are projections and not guaranteed.
-        </div>
-
-        <script>
-          window.onload = function() {
-            window.print();
-            window.onafterprint = function() { window.close(); };
-          }
-        </script>
-      </body>
-    </html>
-  `);
-
-  printWindow.document.close();
+  doc.save(`propintel-${safeFileName(data.address)}.pdf`);
 }

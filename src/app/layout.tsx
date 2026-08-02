@@ -47,23 +47,25 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider
-      afterSignOutUrl="/login"
-      signInUrl="/login"
-      signUpUrl="/login?tab=register"
-      appearance={clerkAppearance}
+    <html
+      lang="en"
+      className={`${display.variable} ${body.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <html
-        lang="en"
-        className={`${display.variable} ${body.variable} ${geistMono.variable} h-full antialiased`}
+      <body
+        className="flex min-h-full flex-col font-sans text-foreground"
+        suppressHydrationWarning
       >
-        <body
-          className="flex min-h-full flex-col font-sans text-foreground"
-          suppressHydrationWarning
+        {/* Clerk v7 + Next 16: provider must be inside <body>, not wrapping <html> */}
+        <ClerkProvider
+          dynamic
+          afterSignOutUrl="/login"
+          signInUrl="/login"
+          signUpUrl="/login?tab=register"
+          appearance={clerkAppearance}
         >
           <Providers>{children}</Providers>
-        </body>
-      </html>
-    </ClerkProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }

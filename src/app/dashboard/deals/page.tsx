@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useTransition } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Search,
   Trash2,
@@ -9,11 +9,26 @@ import {
   Loader2,
   MapPin,
   Eye,
+  Star,
+  Archive,
+  Copy,
+  FileDown,
 } from 'lucide-react';
 import SpotlightCard from '@/components/ui/SpotlightCard';
 import PageHeader from '@/components/dashboard/PageHeader';
 import { SkeletonRows } from '@/components/ui/Skeleton';
-import { getUserAnalyses, deleteAnalysis } from '@/app/actions/analysisActions';
+import { IconTooltip } from '@/components/ui/IconTooltip';
+import { useToast } from '@/components/ui/Toast';
+import {
+  getUserAnalyses,
+  deleteAnalysis,
+  toggleFavoriteAnalysis,
+  archiveAnalysis,
+  duplicateAnalysis,
+} from '@/app/actions/analysisActions';
+import { exportToPDF } from '@/lib/services/reports';
+import { createReportAction } from '@/app/actions/reportActions';
+import Link from 'next/link';
 
 interface SavedDeal {
   id: string;
@@ -44,6 +59,8 @@ interface SavedDeal {
   mortgageTerm: number | null;
   aiVerdict: string | null;
   aiHeadline: string | null;
+  isFavorite: boolean;
+  isArchived: boolean;
   aiPayload: {
     summary?: Array<{ label: string; value: string }>;
     strengths?: Array<{ title: string; detail: string }>;
@@ -52,6 +69,9 @@ interface SavedDeal {
   } | null;
   createdAt: string;
 }
+
+type DealTab = 'all' | 'favorites' | 'archived' | 'deleted';
+
 
 function money(n: number) {
   return `$${Math.round(n).toLocaleString()}`;
@@ -67,17 +87,20 @@ function parseAiPayload(raw: string | null | undefined) {
 }
 
 export default function SavedDealsPage() {
+  const toast = useToast();
   const [deals, setDeals] = useState<SavedDeal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [tab, setTab] = useState<DealTab>('all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showComparison, setShowComparison] = useState(false);
   const [activeDeal, setActiveDeal] = useState<SavedDeal | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [busyKey, setBusyKey] = useState<string | null>(null);
 
-  const loadDeals = async () => {
+  const loadDeals = async (activeTab: DealTab = tab, opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setIsLoading(true);
     try {
-      const { propertyAnalyses, flipAnalyses } = await getUserAnalyses();
+      const { propertyAnalyses, flipAnalyses } = await getUserAnalyses({ tab: activeTab });
 
       const propertyDeals: SavedDeal[] = propertyAnalyses.map((a) => ({
         id: a.id,
@@ -108,6 +131,8 @@ export default function SavedDealsPage() {
         mortgageTerm: a.mortgageTerm,
         aiVerdict: a.aiVerdict,
         aiHeadline: a.aiHeadline,
+        isFavorite: a.isFavorite,
+        isArchived: a.isArchived,
         aiPayload: parseAiPayload(a.aiPayloadJson),
         createdAt: new Date(a.createdAt).toISOString(),
       }));
@@ -138,6 +163,8 @@ export default function SavedDealsPage() {
         mortgageTerm: null,
         aiVerdict: a.aiVerdict,
         aiHeadline: a.aiHeadline,
+        isFavorite: a.isFavorite,
+        isArchived: a.isArchived,
         aiPayload: parseAiPayload(a.aiPayloadJson),
         createdAt: new Date(a.createdAt).toISOString(),
       }));
@@ -148,14 +175,16 @@ export default function SavedDealsPage() {
       setDeals(combined);
     } catch (e) {
       console.error(e);
+      toast.error('Could not load deals');
     } finally {
-      setIsLoading(false);
+      if (!opts?.silent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadDeals();
-  }, []);
+    void loadDeals(tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   useEffect(() => {
     if (!showComparison && !activeDeal) return;
@@ -180,23 +209,210 @@ export default function SavedDealsPage() {
     );
   };
 
-  const handleDeleteDeal = (id: string, e?: React.MouseEvent) => {
+  const handleDeleteDeal = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     const deal = deals.find((d) => d.id === id);
-    if (!deal) return;
-
+    if (!deal || busyKey) return;
+    const key = `del:${id}`;
+    setBusyKey(key);
+    const prev = deals;
     if (activeDeal?.id === id) setActiveDeal(null);
-    setDeals((prev) => prev.filter((d) => d.id !== id));
-    setSelectedIds((prev) => prev.filter((item) => item !== id));
+    setDeals((list) => list.filter((d) => d.id !== id));
+    setSelectedIds((ids) => ids.filter((item) => item !== id));
+    try {
+      await deleteAnalysis(id, deal.analysisType);
+      toast.success(tab === 'deleted' ? 'Removed permanently' : 'Moved to Deleted');
+    } catch {
+      setDeals(prev);
+      toast.error('Could not delete deal');
+    } finally {
+      setBusyKey(null);
+    }
+  };
 
-    startTransition(async () => {
-      try {
-        await deleteAnalysis(id, deal.analysisType);
-      } catch (err) {
-        console.error(err);
-        await loadDeals();
+  const handleFavorite = async (deal: SavedDeal, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (busyKey) return;
+    const key = `fav:${deal.id}`;
+    setBusyKey(key);
+    const nextFav = !deal.isFavorite;
+    setDeals((list) =>
+      list
+        .map((d) => (d.id === deal.id ? { ...d, isFavorite: nextFav } : d))
+        .filter((d) => !(tab === 'favorites' && !d.isFavorite))
+    );
+    try {
+      const res = await toggleFavoriteAnalysis(deal.id, deal.analysisType);
+      if (!res.success) throw new Error('failed');
+      toast.success(nextFav ? 'Added to Favorites' : 'Removed from Favorites');
+    } catch {
+      setDeals((list) =>
+        list.map((d) => (d.id === deal.id ? { ...d, isFavorite: deal.isFavorite } : d))
+      );
+      toast.error('Could not update favorite');
+      await loadDeals(tab, { silent: true });
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const handleArchive = async (deal: SavedDeal, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (busyKey) return;
+    const archiving = tab !== 'archived';
+    setBusyKey(`arc:${deal.id}`);
+    const prev = deals;
+    setDeals((list) => list.filter((d) => d.id !== deal.id));
+    try {
+      const res = await archiveAnalysis(deal.id, deal.analysisType, archiving);
+      if (!res.success) throw new Error('failed');
+      toast.success(archiving ? 'Archived' : 'Restored from archive');
+    } catch {
+      setDeals(prev);
+      toast.error('Could not archive deal');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const handleDuplicate = async (deal: SavedDeal, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (busyKey) return;
+    setBusyKey(`dup:${deal.id}`);
+    try {
+      const res = await duplicateAnalysis(deal.id, deal.analysisType);
+      if (!res.success || !res.copy) throw new Error(res.error || 'failed');
+      const copy = res.copy;
+      if (tab === 'all' || tab === 'favorites') {
+        const mapped: SavedDeal =
+          res.analysisType === 'PROPERTY'
+            ? {
+                id: copy.id,
+                address: [copy.address, (copy as { city?: string }).city, (copy as { state?: string }).state]
+                  .filter(Boolean)
+                  .join(', '),
+                city: (copy as { city?: string }).city,
+                state: (copy as { state?: string }).state,
+                zip: (copy as { zip?: string }).zip,
+                type:
+                  (copy as { strategyType?: string }).strategyType === 'rental'
+                    ? 'Rental L/T'
+                    : 'Buy & Hold',
+                analysisType: 'PROPERTY',
+                purchasePrice: copy.purchasePrice,
+                rehabCost: copy.rehabCost,
+                arv: copy.arv,
+                rent: (copy as { rent?: number }).rent ?? 0,
+                downPayment: (copy as { downPayment?: number }).downPayment ?? 0,
+                cashFlow: (copy as { cashFlow?: number | null }).cashFlow ?? 0,
+                roi: (copy as { roi?: number | null }).roi ?? 0,
+                capRate: (copy as { capRate?: number | null }).capRate ?? 0,
+                dscr: (copy as { dscr?: number | null }).dscr ?? 0,
+                cashOnCash: (copy as { cashOnCash?: number | null }).cashOnCash ?? 0,
+                profit: null,
+                mao: null,
+                financingCost: null,
+                holdingCost: null,
+                sellingCost: null,
+                vacancyRate: (copy as { vacancyRate?: number | null }).vacancyRate ?? null,
+                maintenanceRate: (copy as { maintenanceRate?: number | null }).maintenanceRate ?? null,
+                mortgageRate: (copy as { mortgageRate?: number | null }).mortgageRate ?? null,
+                mortgageTerm: (copy as { mortgageTerm?: number | null }).mortgageTerm ?? null,
+                aiVerdict: copy.aiVerdict,
+                aiHeadline: copy.aiHeadline,
+                isFavorite: false,
+                isArchived: false,
+                aiPayload: parseAiPayload(copy.aiPayloadJson),
+                createdAt: new Date(copy.createdAt).toISOString(),
+              }
+            : {
+                id: copy.id,
+                address: copy.address,
+                type: 'Fix & Flip',
+                analysisType: 'FLIP',
+                purchasePrice: copy.purchasePrice,
+                rehabCost: copy.rehabCost,
+                arv: copy.arv,
+                rent: 0,
+                downPayment: 0,
+                cashFlow: 0,
+                roi: copy.roi ?? 0,
+                capRate: 0,
+                dscr: 0,
+                cashOnCash: 0,
+                profit: copy.profit ?? null,
+                mao: copy.mao ?? null,
+                financingCost: copy.financingCost ?? null,
+                holdingCost: copy.holdingCost ?? null,
+                sellingCost: copy.sellingCost ?? null,
+                vacancyRate: null,
+                maintenanceRate: null,
+                mortgageRate: null,
+                mortgageTerm: null,
+                aiVerdict: copy.aiVerdict,
+                aiHeadline: copy.aiHeadline,
+                isFavorite: false,
+                isArchived: false,
+                aiPayload: parseAiPayload(copy.aiPayloadJson),
+                createdAt: new Date(copy.createdAt).toISOString(),
+              };
+        setDeals((list) => [mapped, ...list]);
       }
-    });
+      toast.success('Deal duplicated', 'Open the copy from All deals');
+    } catch {
+      toast.error('Could not duplicate deal');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const handlePdf = async (deal: SavedDeal, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (busyKey) return;
+    setBusyKey(`pdf:${deal.id}`);
+    try {
+      const metrics =
+        deal.analysisType === 'FLIP'
+          ? [
+              { label: 'Profit', value: money(deal.profit || 0) },
+              { label: 'ROI', value: `${deal.roi.toFixed(1)}%` },
+              { label: 'MAO', value: money(deal.mao || 0) },
+            ]
+          : [
+              { label: 'Cash flow', value: money(deal.cashFlow) },
+              { label: 'Cap rate', value: `${deal.capRate.toFixed(1)}%` },
+              { label: 'DSCR', value: deal.dscr.toFixed(2) },
+              { label: 'CoC', value: `${deal.cashOnCash.toFixed(1)}%` },
+            ];
+      exportToPDF({
+        address: deal.address,
+        type: deal.type,
+        metrics,
+        inputs: [
+          { label: 'Purchase', value: deal.purchasePrice },
+          { label: 'Rehab', value: deal.rehabCost },
+          { label: 'ARV', value: deal.arv },
+        ],
+        aiAnalysis:
+          deal.aiPayload?.reportText || deal.aiHeadline || 'Saved deal export from PropIntel.',
+      });
+      await createReportAction({
+        type:
+          deal.analysisType === 'FLIP'
+            ? 'FLIP'
+            : deal.type.includes('Rental')
+              ? 'RENTAL'
+              : 'PROPERTY',
+        title: `${deal.type} — ${deal.address}`,
+        address: deal.address,
+        payload: { dealId: deal.id, metrics },
+      });
+      toast.success('PDF downloaded', 'Also saved under Reports → History');
+    } catch {
+      toast.error('PDF download failed');
+    } finally {
+      setBusyKey(null);
+    }
   };
 
   const filteredDeals = deals.filter((d) =>
@@ -204,24 +420,61 @@ export default function SavedDealsPage() {
   );
 
   const selectedDeals = deals.filter((d) => selectedIds.includes(d.id));
+  const TABS: { id: DealTab; label: string }[] = [
+    { id: 'all', label: 'All deals' },
+    { id: 'favorites', label: 'Favorites' },
+    { id: 'archived', label: 'Archived' },
+    { id: 'deleted', label: 'Deleted' },
+  ];
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <PageHeader
-        title="Saved deals"
-        description="Browse your saved underwriting, compare yields, and clean up old analyses."
+        title="Deals"
+        description="Your financial analyses of properties (numbers + AI). Separate from My Properties inventory."
         actions={
-          selectedIds.length >= 2 ? (
-            <button
-              type="button"
-              onClick={() => setShowComparison(true)}
-              className="btn-ink inline-flex cursor-pointer items-center gap-2 px-4 py-2.5 text-sm"
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/dashboard/deals/compare"
+              className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
             >
-              <ArrowRightLeft className="h-4 w-4" /> Compare selected ({selectedIds.length})
-            </button>
-          ) : undefined
+              <ArrowRightLeft className="h-4 w-4" /> Compare
+            </Link>
+            {selectedIds.length >= 2 ? (
+              <button
+                type="button"
+                onClick={() => setShowComparison(true)}
+                className="btn-ink inline-flex cursor-pointer items-center gap-2 px-4 py-2.5 text-sm"
+              >
+                <ArrowRightLeft className="h-4 w-4" /> Compare selected ({selectedIds.length})
+              </button>
+            ) : null}
+          </div>
         }
       />
+
+      <div className="flex flex-wrap gap-2">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              tab === t.id
+                ? 'bg-teal-800 text-white'
+                : 'border border-[var(--border)] text-[var(--muted)] hover:text-foreground'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+        <Link
+          href="/dashboard/analyze"
+          className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--muted)] hover:text-foreground"
+        >
+          New analysis
+        </Link>
+      </div>
 
       <div className="relative max-w-md">
         <Search className="absolute top-3 left-3 h-4 w-4 text-[var(--muted)]" />
@@ -244,11 +497,13 @@ export default function SavedDealsPage() {
         </div>
       ) : filteredDeals.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[var(--border)] bg-white py-16 text-center text-sm text-[var(--muted)]">
-          No saved analyses yet. Underwrite a deal in the Property Analyzer and hit Save.
+          {tab === 'all'
+            ? 'No saved analyses yet. Run Analyze and hit Save Deal.'
+            : `No deals in ${tab}.`}
         </div>
       ) : (
         <div
-          className={`grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 ${isPending ? 'opacity-80' : ''}`}
+          className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3"
         >
           {filteredDeals.map((deal) => {
             const isChecked = selectedIds.includes(deal.id);
@@ -289,14 +544,87 @@ export default function SavedDealsPage() {
                         <span className="line-clamp-2">{deal.address}</span>
                       </h3>
                     </div>
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteDeal(deal.id, e)}
-                      className="shrink-0 cursor-pointer rounded-lg p-2 text-[var(--muted)] transition-colors hover:bg-red-50 hover:text-red-600"
-                      aria-label="Delete deal"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <IconTooltip label={deal.isFavorite ? 'Remove favorite' : 'Favorite'}>
+                        <button
+                          type="button"
+                          disabled={!!busyKey}
+                          onClick={(e) => void handleFavorite(deal, e)}
+                          className={`rounded-lg p-2 transition-colors disabled:opacity-50 ${
+                            deal.isFavorite
+                              ? 'text-amber-600'
+                              : 'text-[var(--muted)] hover:text-amber-600'
+                          }`}
+                          aria-label={deal.isFavorite ? 'Remove favorite' : 'Favorite'}
+                        >
+                          {busyKey === `fav:${deal.id}` ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Star className={`h-4 w-4 ${deal.isFavorite ? 'fill-current' : ''}`} />
+                          )}
+                        </button>
+                      </IconTooltip>
+                      <IconTooltip label={tab === 'archived' ? 'Unarchive' : 'Archive'}>
+                        <button
+                          type="button"
+                          disabled={!!busyKey}
+                          onClick={(e) => void handleArchive(deal, e)}
+                          className="rounded-lg p-2 text-[var(--muted)] transition-colors hover:text-foreground disabled:opacity-50"
+                          aria-label={tab === 'archived' ? 'Unarchive' : 'Archive'}
+                        >
+                          {busyKey === `arc:${deal.id}` ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Archive className="h-4 w-4" />
+                          )}
+                        </button>
+                      </IconTooltip>
+                      <IconTooltip label="Duplicate deal">
+                        <button
+                          type="button"
+                          disabled={!!busyKey}
+                          onClick={(e) => void handleDuplicate(deal, e)}
+                          className="rounded-lg p-2 text-[var(--muted)] transition-colors hover:text-foreground disabled:opacity-50"
+                          aria-label="Duplicate deal"
+                        >
+                          {busyKey === `dup:${deal.id}` ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </button>
+                      </IconTooltip>
+                      <IconTooltip label="Download PDF">
+                        <button
+                          type="button"
+                          disabled={!!busyKey}
+                          onClick={(e) => void handlePdf(deal, e)}
+                          className="rounded-lg p-2 text-[var(--muted)] transition-colors hover:text-foreground disabled:opacity-50"
+                          aria-label="Download PDF"
+                        >
+                          {busyKey === `pdf:${deal.id}` ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <FileDown className="h-4 w-4" />
+                          )}
+                        </button>
+                      </IconTooltip>
+                      <IconTooltip label={tab === 'deleted' ? 'Delete forever' : 'Move to Deleted'}>
+                        <button
+                          type="button"
+                          disabled={!!busyKey}
+                          onClick={(e) => void handleDeleteDeal(deal.id, e)}
+                          className="shrink-0 cursor-pointer rounded-lg p-2 text-[var(--muted)] transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                          aria-label="Delete deal"
+                        >
+                          {busyKey === `del:${deal.id}` ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
+                      </IconTooltip>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)]/60 px-3 py-3 text-center">
@@ -379,9 +707,13 @@ export default function SavedDealsPage() {
                       />
                       <span className="text-xs text-[var(--muted)]">Compare</span>
                     </label>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-800">
-                      <Eye className="h-3.5 w-3.5" /> View details
-                    </span>
+                    <Link
+                      href={`/dashboard/deals/${deal.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-800 hover:underline"
+                    >
+                      <Eye className="h-3.5 w-3.5" /> Open deal
+                    </Link>
                   </div>
                 </div>
               </SpotlightCard>

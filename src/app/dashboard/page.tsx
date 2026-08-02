@@ -10,6 +10,7 @@ import {
   Layers,
   Plus,
   PlusCircle,
+  Search,
 } from 'lucide-react';
 import { AreaChart } from '@/components/ui/Charts';
 import PageHeader from '@/components/dashboard/PageHeader';
@@ -71,10 +72,10 @@ export default function DashboardOverviewPage() {
         description="Portfolio pulse, pipeline health, and underwriting shortcuts."
         actions={
           <Link
-            href="/dashboard/analyzer"
+            href="/dashboard/analyze"
             className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm"
           >
-            <Plus className="h-4 w-4" /> New underwrite
+            <Plus className="h-4 w-4" /> New analysis
           </Link>
         }
       />
@@ -144,7 +145,14 @@ export default function DashboardOverviewPage() {
             </h3>
             <div className="grid grid-cols-2 gap-3">
               <Link
-                href="/dashboard/analyzer"
+                href="/dashboard/explore"
+                className="flex flex-col items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-center transition hover:border-teal-700/25"
+              >
+                <Search className="h-5 w-5 text-teal-700" />
+                <span className="text-xs font-semibold">Explore</span>
+              </Link>
+              <Link
+                href="/dashboard/analyze"
                 className="flex flex-col items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-center transition hover:border-teal-700/25"
               >
                 <PlusCircle className="h-5 w-5 text-teal-700" />
@@ -156,6 +164,13 @@ export default function DashboardOverviewPage() {
               >
                 <Layers className="h-5 w-5 text-teal-700" />
                 <span className="text-xs font-semibold">CRM</span>
+              </Link>
+              <Link
+                href="/dashboard/portfolio"
+                className="flex flex-col items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-center transition hover:border-teal-700/25"
+              >
+                <TrendingUp className="h-5 w-5 text-teal-700" />
+                <span className="text-xs font-semibold">Portfolio</span>
               </Link>
             </div>
           </div>

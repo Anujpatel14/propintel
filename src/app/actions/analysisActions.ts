@@ -183,8 +183,10 @@ export async function savePropertyAnalysis(input: PropertyAnalysisInput) {
     },
   });
 
-  revalidatePath('/dashboard/analyzer');
+  revalidatePath('/dashboard/analyze');
   revalidatePath('/dashboard/deals');
+  revalidatePath('/dashboard/portfolio');
+  revalidatePath('/dashboard/reports');
   return { success: true as const, analysis, updated };
 }
 
@@ -273,24 +275,46 @@ export async function saveFlipAnalysis(input: {
     },
   });
 
-  revalidatePath('/dashboard/analyzer');
+  revalidatePath('/dashboard/analyze');
   revalidatePath('/dashboard/deals');
+  revalidatePath('/dashboard/portfolio');
   return { success: true as const, flip, updated };
 }
 
-export async function getUserAnalyses() {
+export async function getUserAnalyses(filter?: {
+  tab?: 'all' | 'favorites' | 'archived' | 'deleted';
+}) {
   const user = await requireAuth();
+  const tab = filter?.tab || 'all';
+
+  const propertyWhere =
+    tab === 'favorites'
+      ? { userId: user.id, isFavorite: true, deletedAt: null, isArchived: false }
+      : tab === 'archived'
+        ? { userId: user.id, isArchived: true, deletedAt: null }
+        : tab === 'deleted'
+          ? { userId: user.id, deletedAt: { not: null } }
+          : { userId: user.id, deletedAt: null, isArchived: false };
+
+  const flipWhere =
+    tab === 'favorites'
+      ? { userId: user.id, isFavorite: true, deletedAt: null, isArchived: false }
+      : tab === 'archived'
+        ? { userId: user.id, isArchived: true, deletedAt: null }
+        : tab === 'deleted'
+          ? { userId: user.id, deletedAt: { not: null } }
+          : { userId: user.id, deletedAt: null, isArchived: false };
 
   const propertyAnalyses = await withDbRetry(() =>
     prisma.propertyAnalysis.findMany({
-      where: { userId: user.id },
+      where: propertyWhere,
       orderBy: { createdAt: 'desc' },
     })
   );
 
   const flipAnalyses = await withDbRetry(() =>
     prisma.flipAnalysis.findMany({
-      where: { userId: user.id },
+      where: flipWhere,
       orderBy: { createdAt: 'desc' },
     })
   );
@@ -302,16 +326,144 @@ export async function deleteAnalysis(id: string, type: 'PROPERTY' | 'FLIP') {
   const user = await requireAuth();
 
   if (type === 'PROPERTY') {
-    await prisma.propertyAnalysis.deleteMany({
+    await prisma.propertyAnalysis.updateMany({
       where: { id, userId: user.id },
+      data: { deletedAt: new Date(), isArchived: false },
     });
   } else {
-    await prisma.flipAnalysis.deleteMany({
+    await prisma.flipAnalysis.updateMany({
       where: { id, userId: user.id },
+      data: { deletedAt: new Date(), isArchived: false },
     });
   }
 
-  revalidatePath('/dashboard/analyzer');
+  revalidatePath('/dashboard/analyze');
   revalidatePath('/dashboard/deals');
+  revalidatePath('/dashboard/portfolio');
   return { success: true };
+}
+
+export async function toggleFavoriteAnalysis(id: string, type: 'PROPERTY' | 'FLIP') {
+  const user = await requireAuth();
+  if (type === 'PROPERTY') {
+    const row = await prisma.propertyAnalysis.findFirst({ where: { id, userId: user.id } });
+    if (!row) return { success: false as const };
+    const updated = await prisma.propertyAnalysis.update({
+      where: { id },
+      data: { isFavorite: !row.isFavorite },
+      select: { id: true, isFavorite: true },
+    });
+    return { success: true as const, id: updated.id, isFavorite: updated.isFavorite };
+  }
+  const row = await prisma.flipAnalysis.findFirst({ where: { id, userId: user.id } });
+  if (!row) return { success: false as const };
+  const updated = await prisma.flipAnalysis.update({
+    where: { id },
+    data: { isFavorite: !row.isFavorite },
+    select: { id: true, isFavorite: true },
+  });
+  return { success: true as const, id: updated.id, isFavorite: updated.isFavorite };
+}
+
+export async function archiveAnalysis(id: string, type: 'PROPERTY' | 'FLIP', archived = true) {
+  const user = await requireAuth();
+  const data = { isArchived: archived, deletedAt: null as Date | null };
+  if (type === 'PROPERTY') {
+    const result = await prisma.propertyAnalysis.updateMany({
+      where: { id, userId: user.id },
+      data,
+    });
+    if (!result.count) return { success: false as const };
+  } else {
+    const result = await prisma.flipAnalysis.updateMany({
+      where: { id, userId: user.id },
+      data,
+    });
+    if (!result.count) return { success: false as const };
+  }
+  return { success: true as const, id, isArchived: archived };
+}
+
+export async function duplicateAnalysis(id: string, type: 'PROPERTY' | 'FLIP') {
+  const user = await requireAuth();
+  if (type === 'PROPERTY') {
+    const row = await prisma.propertyAnalysis.findFirst({ where: { id, userId: user.id } });
+    if (!row) return { success: false as const, error: 'Not found' };
+    const { id: _id, createdAt: _c, deletedAt: _d, isFavorite: _f, isArchived: _a, ...rest } = row;
+    const copy = await prisma.propertyAnalysis.create({
+      data: { ...rest, address: `${rest.address} (copy)`, isFavorite: false, isArchived: false },
+    });
+    return { success: true as const, id: copy.id, analysisType: 'PROPERTY' as const, copy };
+  }
+  const row = await prisma.flipAnalysis.findFirst({ where: { id, userId: user.id } });
+  if (!row) return { success: false as const, error: 'Not found' };
+  const { id: _id, createdAt: _c, deletedAt: _d, isFavorite: _f, isArchived: _a, ...rest } = row;
+  const copy = await prisma.flipAnalysis.create({
+    data: { ...rest, address: `${rest.address} (copy)`, isFavorite: false, isArchived: false },
+  });
+  return { success: true as const, id: copy.id, analysisType: 'FLIP' as const, copy };
+}
+
+export async function getAnalysisById(id: string) {
+  const user = await requireAuth();
+  const property = await withDbRetry(() =>
+    prisma.propertyAnalysis.findFirst({ where: { id, userId: user.id } })
+  );
+  if (property) {
+    return { success: true as const, analysisType: 'PROPERTY' as const, analysis: property };
+  }
+  const flip = await withDbRetry(() =>
+    prisma.flipAnalysis.findFirst({ where: { id, userId: user.id } })
+  );
+  if (flip) {
+    return { success: true as const, analysisType: 'FLIP' as const, analysis: flip };
+  }
+  return { success: false as const, error: 'Deal not found' };
+}
+
+export async function getPortfolioSummaryAction() {
+  const user = await requireAuth();
+  const [properties, holds, flips] = await Promise.all([
+    withDbRetry(() =>
+      prisma.property.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'desc' },
+      })
+    ),
+    withDbRetry(() =>
+      prisma.propertyAnalysis.findMany({
+        where: { userId: user.id, deletedAt: null, isArchived: false },
+        orderBy: { createdAt: 'desc' },
+      })
+    ),
+    withDbRetry(() =>
+      prisma.flipAnalysis.findMany({
+        where: { userId: user.id, deletedAt: null, isArchived: false },
+        orderBy: { createdAt: 'desc' },
+      })
+    ),
+  ]);
+
+  const totalPropertyValue = properties.reduce((s, p) => s + (p.estimatedValue || 0), 0);
+  const totalDealPurchase = [...holds, ...flips].reduce((s, d) => s + (d.purchasePrice || 0), 0);
+  const monthlyCashFlow = holds.reduce((s, d) => s + (d.cashFlow || 0), 0);
+  const avgCap =
+    holds.length > 0
+      ? holds.reduce((s, d) => s + (d.capRate || 0), 0) / holds.length
+      : 0;
+
+  return {
+    success: true as const,
+    properties,
+    holds,
+    flips,
+    kpis: {
+      propertyCount: properties.length,
+      dealCount: holds.length + flips.length,
+      totalPropertyValue,
+      totalDealPurchase,
+      monthlyCashFlow,
+      avgCapRate: avgCap,
+    },
+  };
 }

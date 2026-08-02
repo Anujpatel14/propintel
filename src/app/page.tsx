@@ -400,7 +400,7 @@ export default function LandingPage() {
                     </ul>
                   </div>
                   <Link
-                    href="/dashboard/analyzer"
+                    href="/dashboard/analyze"
                     className="mt-10 inline-flex w-fit items-center gap-2 rounded-full bg-[#171c19] px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-[#2a332e]"
                   >
                     Try this model <ArrowRight className="h-4 w-4" />
@@ -754,7 +754,7 @@ export default function LandingPage() {
                 title="Product"
                 links={[
                   { label: 'Platform', href: '#platform' },
-                  { label: 'Analyzer', href: '/login?redirect=/dashboard/analyzer' },
+                  { label: 'Analyze', href: '/login?redirect=/dashboard/analyze' },
                   { label: 'CRM Pipeline', href: '/login?redirect=/dashboard/crm' },
                   { label: 'Pricing', href: '#pricing' },
                 ]}

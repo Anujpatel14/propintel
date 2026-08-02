@@ -22,13 +22,15 @@ import {
   X,
   ShieldCheck,
   Settings,
-  ArrowRightLeft,
   Users,
   Cpu,
   FileEdit,
   ScrollText,
   ArrowLeftRight,
   Loader2,
+  Search,
+  Calculator,
+  FileText,
 } from 'lucide-react';
 
 type NavItem = {
@@ -38,11 +40,14 @@ type NavItem = {
 };
 
 const INVESTOR_NAV: NavItem[] = [
-  { label: 'Overview', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Analyzer', href: '/dashboard/analyzer', icon: TrendingUp },
-  { label: 'CRM Pipeline', href: '/dashboard/crm', icon: Layers },
-  { label: 'Saved Deals', href: '/dashboard/deals', icon: FolderOpen },
-  { label: 'Compare', href: '/dashboard/compare', icon: ArrowRightLeft },
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Property Explorer', href: '/dashboard/explore', icon: Search },
+  { label: 'My Properties', href: '/dashboard/properties', icon: Building2 },
+  { label: 'Analyze', href: '/dashboard/analyze', icon: Calculator },
+  { label: 'Deals', href: '/dashboard/deals', icon: FolderOpen },
+  { label: 'CRM', href: '/dashboard/crm', icon: Layers },
+  { label: 'Reports', href: '/dashboard/reports', icon: FileText },
+  { label: 'Portfolio', href: '/dashboard/portfolio', icon: TrendingUp },
   { label: 'Coaching', href: '/dashboard/coaching', icon: Calendar },
   { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { label: 'Settings', href: '/dashboard/settings/profile', icon: Settings },

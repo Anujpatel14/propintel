@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { ArrowRightLeft, Check } from 'lucide-react';
 import { getUserAnalyses } from '@/app/actions/analysisActions';
 import PageHeader from '@/components/dashboard/PageHeader';
@@ -141,6 +142,14 @@ export default function CompareDealsPage() {
       <PageHeader
         title="Compare deals"
         description="Compare up to 4 saved analyses side-by-side. Stronger metrics highlight automatically."
+        actions={
+          <Link
+            href="/dashboard/deals"
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+          >
+            Back to Deals
+          </Link>
+        }
       />
 
       {loading ? (
