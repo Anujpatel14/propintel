@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { ArrowRightLeft, Loader2, Check } from 'lucide-react';
+import { ArrowRightLeft, Check } from 'lucide-react';
 import { getUserAnalyses } from '@/app/actions/analysisActions';
 import PageHeader from '@/components/dashboard/PageHeader';
+import { SkeletonCards, SkeletonRows } from '@/components/ui/Skeleton';
 
 interface CompareDeal {
   id: string;
@@ -20,15 +21,50 @@ interface CompareDeal {
   roi: number;
 }
 
-const METRICS: { key: keyof CompareDeal; label: string; format: (v: number) => string; higherBetter: boolean }[] = [
-  { key: 'purchasePrice', label: 'Purchase price', format: (v) => `$${v.toLocaleString()}`, higherBetter: false },
-  { key: 'rehabCost', label: 'Rehab', format: (v) => `$${v.toLocaleString()}`, higherBetter: false },
+const METRICS: {
+  key: keyof CompareDeal;
+  label: string;
+  format: (v: number) => string;
+  higherBetter: boolean;
+}[] = [
+  {
+    key: 'purchasePrice',
+    label: 'Purchase price',
+    format: (v) => `$${v.toLocaleString()}`,
+    higherBetter: false,
+  },
+  {
+    key: 'rehabCost',
+    label: 'Rehab',
+    format: (v) => `$${v.toLocaleString()}`,
+    higherBetter: false,
+  },
   { key: 'arv', label: 'ARV', format: (v) => `$${v.toLocaleString()}`, higherBetter: true },
-  { key: 'rent', label: 'Monthly rent', format: (v) => `$${v.toLocaleString()}`, higherBetter: true },
-  { key: 'cashFlow', label: 'Cash flow', format: (v) => `$${v.toFixed(0)}/mo`, higherBetter: true },
-  { key: 'capRate', label: 'Cap rate', format: (v) => `${v.toFixed(2)}%`, higherBetter: true },
+  {
+    key: 'rent',
+    label: 'Monthly rent',
+    format: (v) => `$${v.toLocaleString()}`,
+    higherBetter: true,
+  },
+  {
+    key: 'cashFlow',
+    label: 'Cash flow',
+    format: (v) => `$${v.toFixed(0)}/mo`,
+    higherBetter: true,
+  },
+  {
+    key: 'capRate',
+    label: 'Cap rate',
+    format: (v) => `${v.toFixed(2)}%`,
+    higherBetter: true,
+  },
   { key: 'dscr', label: 'DSCR', format: (v) => v.toFixed(2), higherBetter: true },
-  { key: 'cashOnCash', label: 'Cash-on-cash', format: (v) => `${v.toFixed(2)}%`, higherBetter: true },
+  {
+    key: 'cashOnCash',
+    label: 'Cash-on-cash',
+    format: (v) => `${v.toFixed(2)}%`,
+    higherBetter: true,
+  },
   { key: 'roi', label: 'ROI', format: (v) => `${v.toFixed(2)}%`, higherBetter: true },
 ];
 
@@ -100,20 +136,6 @@ export default function CompareDealsPage() {
     return best.id;
   };
 
-  if (loading) {
-    return (
-      <div className="mx-auto max-w-7xl space-y-8">
-        <PageHeader
-          title="Compare deals"
-          description="Compare up to 4 saved analyses side-by-side. Stronger metrics highlight automatically."
-        />
-        <div className="flex items-center justify-center py-20 text-[var(--muted)]">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading deals…
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <PageHeader
@@ -121,7 +143,14 @@ export default function CompareDealsPage() {
         description="Compare up to 4 saved analyses side-by-side. Stronger metrics highlight automatically."
       />
 
-      {deals.length === 0 ? (
+      {loading ? (
+        <>
+          <SkeletonCards count={6} />
+          <div className="surface-card space-y-4 p-6">
+            <SkeletonRows rows={6} cols={3} />
+          </div>
+        </>
+      ) : deals.length === 0 ? (
         <div className="surface-card py-16 text-center text-sm text-[var(--muted)]">
           Save analyses in the Property Analyzer first, then compare them here.
         </div>
@@ -197,6 +226,12 @@ export default function CompareDealsPage() {
                 </tbody>
               </table>
             </div>
+          )}
+
+          {selectedDeals.length < 2 && (
+            <p className="text-center text-xs text-[var(--muted)]">
+              Select at least 2 deals to see the comparison table.
+            </p>
           )}
         </>
       )}

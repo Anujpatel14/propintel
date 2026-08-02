@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import SpotlightCard from '@/components/ui/SpotlightCard';
 import PageHeader from '@/components/dashboard/PageHeader';
+import { SkeletonRows } from '@/components/ui/Skeleton';
 import {
   bookCoachingSession,
   getUserCoachingSessions,
@@ -529,8 +530,8 @@ export default function CoachingPortalPage() {
 
             <div className="max-h-[min(62vh,560px)] overflow-y-auto overscroll-contain px-3 py-3 sm:px-4">
               {isLoading ? (
-                <div className="flex items-center justify-center py-16 text-[var(--muted)]">
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading sessions…
+                <div className="space-y-3 py-2">
+                  <SkeletonRows rows={5} cols={2} />
                 </div>
               ) : filteredBookings.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[var(--border)] px-6 py-14 text-center">

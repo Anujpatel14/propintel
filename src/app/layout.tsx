@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Syne, Outfit, Geist_Mono } from 'next/font/google';
 import { ClerkProvider } from '@clerk/nextjs';
 import Providers from './providers';
+import { clerkAppearance } from '@/lib/clerkAppearance';
 import './globals.css';
 
 const display = Syne({
@@ -50,6 +51,7 @@ export default function RootLayout({
       afterSignOutUrl="/login"
       signInUrl="/login"
       signUpUrl="/login?tab=register"
+      appearance={clerkAppearance}
     >
       <html
         lang="en"

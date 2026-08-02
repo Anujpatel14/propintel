@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Check, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
 import PageHeader from '@/components/dashboard/PageHeader';
+import { Skeleton, SkeletonCards, SkeletonValue } from '@/components/ui/Skeleton';
 import {
   switchUserPlan,
   getUserSubscriptionDetails,
@@ -275,8 +276,13 @@ function BillingPageInner() {
       {/* Current plan */}
       <section className="rounded-2xl border border-[var(--border)] bg-white p-6">
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-24" />
+              <SkeletonValue className="h-8 w-40" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+            <Skeleton className="h-10 w-36 rounded-xl" />
           </div>
         ) : (
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -390,7 +396,10 @@ function BillingPageInner() {
         </div>
 
         <div className="space-y-3">
-          {catalog.map((p) => {
+          {loading ? (
+            <SkeletonCards count={3} className="lg:grid-cols-1" />
+          ) : (
+            catalog.map((p) => {
             const isFree = p.code === 'FREE' || p.priceMonthly === 0;
             const isCurrentPlan = p.code === currentPlan;
             const intervalMatches = billingInterval === currentBillingInterval;
@@ -468,14 +477,19 @@ function BillingPageInner() {
                 </div>
               </div>
             );
-          })}
+          })
+          )}
         </div>
       </section>
 
       {/* Orders */}
       <section className="rounded-2xl border border-[var(--border)] bg-white p-6">
         <h3 className="text-sm font-bold">Recent payments</h3>
-        {orders.length === 0 ? (
+        {loading ? (
+          <div className="mt-4">
+            <SkeletonCards count={3} className="lg:grid-cols-1" />
+          </div>
+        ) : orders.length === 0 ? (
           <p className="mt-3 text-sm text-[var(--muted)]">No payments yet.</p>
         ) : (
           <ul className="mt-4 divide-y divide-[var(--border)]">
@@ -515,8 +529,9 @@ export default function BillingPage() {
   return (
     <React.Suspense
       fallback={
-        <div className="flex justify-center py-20 text-[var(--muted)]">
-          <Loader2 className="h-5 w-5 animate-spin" />
+        <div className="mx-auto max-w-7xl space-y-8 py-8">
+          <SkeletonValue className="h-8 w-48" />
+          <SkeletonCards count={3} className="lg:grid-cols-1" />
         </div>
       }
     >

@@ -53,3 +53,40 @@ export function SkeletonRows({
     </div>
   );
 }
+
+/** Form field placeholders — keep section labels visible around these. */
+export function SkeletonFields({ count = 6, cols = 2 }: { count?: number; cols?: number }) {
+  return (
+    <div
+      className={`grid grid-cols-1 gap-4 ${cols === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}
+      role="status"
+      aria-label="Loading form"
+    >
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="space-y-2">
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Card grid placeholders (deal pickers, plan cards, coaching tiles). */
+export function SkeletonCards({ count = 6, className = '' }: { count?: number; className?: string }) {
+  return (
+    <div
+      className={`grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 ${className}`}
+      role="status"
+      aria-label="Loading cards"
+    >
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="space-y-3 rounded-xl border border-[var(--border)] p-4">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-4 w-3/4 max-w-[80%]" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
+      ))}
+    </div>
+  );
+}

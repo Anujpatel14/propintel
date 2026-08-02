@@ -10,6 +10,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/dashboard/coaching': 'Coaching',
   '/dashboard/billing': 'Billing',
   '/dashboard/settings/profile': 'Profile',
+  '/dashboard/settings/account': 'Account',
   '/dashboard/settings/underwriting': 'Underwriting',
   '/admin': 'Admin',
   '/admin/users': 'Users',

@@ -277,3 +277,84 @@ input[type="reset"]:disabled {
   background: rgba(127, 154, 136, 0.28);
   color: #141a17;
 }
+
+/* ---------------------------------------------------------------------------
+ * Clerk UI — keep components aligned with PropIntel surface / teal theme
+ * --------------------------------------------------------------------------- */
+.clerk-user-profile .cl-rootBox,
+.clerk-user-profile .cl-cardBox {
+  width: 100%;
+  max-width: none;
+}
+
+.clerk-user-profile .cl-navbar {
+  background: var(--surface-soft) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 1rem !important;
+  box-shadow: none !important;
+}
+
+.clerk-user-profile .cl-navbarButton[data-active='true'],
+.clerk-user-profile .cl-navbarButton[aria-current='page'] {
+  background: #fff !important;
+  color: #134e4a !important;
+  font-weight: 700 !important;
+  box-shadow: 0 1px 2px rgba(20, 26, 23, 0.06) !important;
+}
+
+.clerk-user-profile .cl-scrollBox {
+  border: 1px solid var(--border) !important;
+  border-radius: 1rem !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+.clerk-user-profile .cl-profileSectionTitleText,
+.cl-profileSectionTitleText {
+  font-weight: 700 !important;
+  color: var(--foreground) !important;
+}
+
+.cl-formButtonPrimary,
+.cl-button[data-variant='solid'] {
+  background-color: #0f766e !important;
+  border-radius: 0.75rem !important;
+  text-transform: none !important;
+  box-shadow: none !important;
+}
+
+.cl-formButtonPrimary:hover,
+.cl-button[data-variant='solid']:hover {
+  background-color: #0d665f !important;
+}
+
+.cl-formFieldInput:focus,
+.cl-input:focus {
+  border-color: #0f766e !important;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.2) !important;
+}
+
+.cl-footerActionLink,
+.cl-formButtonReset,
+.cl-identityPreviewEditButton,
+.cl-profileSectionPrimaryButton {
+  color: #115e59 !important;
+}
+
+.cl-badge {
+  background: rgba(15, 118, 110, 0.1) !important;
+  color: #115e59 !important;
+  border-radius: 0.375rem !important;
+}
+
+.cl-internal-b3fm6y,
+.cl-modalBackdrop {
+  background: rgba(20, 26, 23, 0.4) !important;
+}
+
+.cl-modalContent {
+  border-radius: 1rem !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow-lift) !important;
+}
+

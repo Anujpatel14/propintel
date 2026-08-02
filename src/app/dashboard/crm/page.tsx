@@ -17,6 +17,7 @@ import {
   getUserDeals,
 } from '@/app/actions/crmActions';
 import PageHeader from '@/components/dashboard/PageHeader';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 interface LeadItem {
   id: string;
@@ -178,8 +179,22 @@ export default function CRMPipelinePage() {
       />
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-20 text-[var(--muted)]">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading pipeline…
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {COLUMNS.map((col) => (
+            <div
+              key={col.key}
+              className={`flex w-[min(85vw,260px)] shrink-0 flex-col space-y-3 rounded-xl border border-[var(--border)] border-t-2 p-4 md:w-[220px] ${col.color}`}
+            >
+              <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
+                <span className="text-xs font-extrabold tracking-wide text-foreground uppercase">
+                  {col.title}
+                </span>
+                <Skeleton className="h-5 w-6 rounded-md" />
+              </div>
+              <Skeleton className="h-24 w-full rounded-xl" />
+              <Skeleton className="h-24 w-full rounded-xl" />
+            </div>
+          ))}
         </div>
       ) : loadError ? (
         <div className="space-y-4 rounded-xl border border-red-500/20 bg-red-50 p-6 text-center">

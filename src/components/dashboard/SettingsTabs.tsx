@@ -5,15 +5,16 @@ import { usePathname } from 'next/navigation';
 
 const TABS = [
   { href: '/dashboard/settings/profile', label: 'Profile' },
+  { href: '/dashboard/settings/account', label: 'Account' },
   { href: '/dashboard/settings/underwriting', label: 'Underwriting' },
 ] as const;
 
-/** Shared settings sub-nav used on profile + underwriting pages. */
+/** Shared settings sub-nav — profile details, account security, underwriting. */
 export default function SettingsTabs() {
   const pathname = usePathname();
 
   return (
-    <div className="flex gap-2 text-xs">
+    <div className="flex flex-wrap gap-2 text-xs">
       {TABS.map((tab) => {
         const active = pathname.startsWith(tab.href);
         return (

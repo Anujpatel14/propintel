@@ -7,34 +7,7 @@ import { SignIn, SignUp, useAuth, useClerk } from '@clerk/nextjs';
 import { Loader2 } from 'lucide-react';
 import { BrandLogo } from '@/components/BrandLogo';
 import { usePageTitle } from '@/components/DocumentTitle';
-
-const clerkAppearance = {
-  variables: {
-    colorPrimary: '#0f766e',
-    colorText: '#141a17',
-    colorTextSecondary: '#5c6b63',
-    colorBackground: '#ffffff',
-    colorInputBackground: '#f4f6f3',
-    colorInputText: '#141a17',
-    borderRadius: '0.75rem',
-    fontFamily: 'var(--font-body), system-ui, sans-serif',
-  },
-  elements: {
-    rootBox: 'w-full',
-    cardBox: 'w-full shadow-none',
-    card: 'w-full border border-[var(--border)] bg-white shadow-none rounded-2xl',
-    headerTitle: 'hidden',
-    headerSubtitle: 'hidden',
-    socialButtonsBlockButton:
-      'border border-[var(--border)] bg-white hover:bg-[var(--surface-soft)] text-sm font-semibold',
-    formButtonPrimary:
-      'bg-teal-700 hover:bg-teal-800 text-white text-sm font-bold shadow-none',
-    formFieldInput: 'bg-[var(--surface-soft)] border-[var(--border)]',
-    footerAction: 'hidden',
-    footer: 'hidden',
-    identityPreviewEditButton: 'text-teal-800',
-  },
-} as const;
+import { clerkAuthAppearance } from '@/lib/clerkAppearance';
 
 function LoginPageContent() {
   const router = useRouter();
@@ -44,11 +17,13 @@ function LoginPageContent() {
   const tabParam = searchParams.get('tab');
   const redirectTo = searchParams.get('redirect');
   const sessionError = searchParams.get('error') === 'session';
+  const resetRequested = searchParams.get('reset') === '1';
+  const prefillEmail = searchParams.get('email') || '';
   const isRegister = tabParam === 'register';
   const [clearing, setClearing] = useState(sessionError);
   const clearedRef = useRef(false);
 
-  usePageTitle(isRegister ? 'Sign up' : 'Sign in');
+  usePageTitle(isRegister ? 'Sign up' : resetRequested ? 'Reset password' : 'Sign in');
 
   const afterAuthUrl =
     redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
@@ -96,9 +71,21 @@ function LoginPageContent() {
             <BrandLogo markSize={40} />
           </Link>
           <p className="mt-3 text-sm text-[var(--muted)]">
-            {isRegister ? 'Create your investor workspace' : 'Sign in to your workspace'}
+            {isRegister
+              ? 'Create your investor workspace'
+              : resetRequested
+                ? 'Use “Forgot password?” below to reset via email'
+                : 'Sign in to your workspace'}
           </p>
         </div>
+
+        {resetRequested && !isRegister ? (
+          <div className="rounded-xl border border-teal-700/20 bg-teal-700/5 px-4 py-3 text-xs text-teal-900">
+            Password reset requested for{' '}
+            <strong>{prefillEmail || 'your account'}</strong>. Open{' '}
+            <strong>Forgot password?</strong> on the form to receive a reset email.
+          </div>
+        ) : null}
 
         {isRegister ? (
           <SignUp
@@ -106,7 +93,7 @@ function LoginPageContent() {
             forceRedirectUrl={afterAuthUrl}
             fallbackRedirectUrl={afterAuthUrl}
             signInUrl="/login"
-            appearance={clerkAppearance}
+            appearance={clerkAuthAppearance}
           />
         ) : (
           <SignIn
@@ -114,7 +101,8 @@ function LoginPageContent() {
             forceRedirectUrl={afterAuthUrl}
             fallbackRedirectUrl={afterAuthUrl}
             signUpUrl="/login?tab=register"
-            appearance={clerkAppearance}
+            appearance={clerkAuthAppearance}
+            initialValues={prefillEmail ? { emailAddress: prefillEmail } : undefined}
           />
         )}
 
