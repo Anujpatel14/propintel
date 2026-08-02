@@ -20,7 +20,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/admin/system/ai-activity': 'AI activity',
   '/admin/coaching': 'Coaching admin',
   '/admin/cms': 'CMS',
-  '/admin/logs': 'Logs',
+  '/admin/logs': 'Audit logs',
   '/admin/settings': 'Admin settings',
 };
 

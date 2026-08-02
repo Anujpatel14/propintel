@@ -386,49 +386,100 @@ export async function updateAdminCoachingSession(
   return { success: true, session };
 }
 
-export async function getAdminAuditLogs(filters?: { search?: string; take?: number }) {
-  await requireAdmin();
-
-  const take = filters?.take ?? 200;
-  const logs = await withDbRetry(() =>
-    prisma.activityLog.findMany({
-      take,
-      orderBy: { createdAt: 'desc' },
-      include: { user: { select: { email: true, name: true, role: true } } },
-    })
-  );
-
-  return { success: true as const, logs };
-}
-
-/**
- * Request / error / system diagnostics from day-wise log files (not the database).
- */
-export async function getAdminSystemLogs(filters?: {
-  dayKey?: string;
-  level?: string;
-  category?: string;
+export async function getAdminAuditLogs(filters?: {
   search?: string;
+  action?: string;
+  role?: string;
+  from?: string;
+  to?: string;
   take?: number;
 }) {
   await requireAdmin();
 
-  const { listLogDays, readDayLogs, dayKeyFrom } = await import('@/lib/logger');
-  const dayKey = filters?.dayKey || dayKeyFrom();
-  const [logs, days] = await Promise.all([
-    readDayLogs({
-      dayKey,
-      level: filters?.level,
-      category: filters?.category,
-      search: filters?.search,
-      take: filters?.take ?? 250,
-    }),
-    listLogDays(),
-  ]);
+  const take = Math.min(Math.max(filters?.take ?? 200, 1), 500);
+  const and: Prisma.ActivityLogWhereInput[] = [];
+
+  if (filters?.action && filters.action !== 'all') {
+    and.push({ action: filters.action });
+  }
+
+  if (filters?.role && (filters.role === 'ADMIN' || filters.role === 'INVESTOR')) {
+    and.push({ user: { role: filters.role } });
+  }
+
+  if (filters?.from || filters?.to) {
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (filters.from) {
+      const from = new Date(filters.from);
+      from.setHours(0, 0, 0, 0);
+      createdAt.gte = from;
+    }
+    if (filters.to) {
+      const to = new Date(filters.to);
+      to.setHours(23, 59, 59, 999);
+      createdAt.lte = to;
+    }
+    and.push({ createdAt });
+  }
+
+  const search = filters?.search?.trim();
+  if (search) {
+    and.push({
+      OR: [
+        { action: { contains: search, mode: 'insensitive' } },
+        { details: { contains: search, mode: 'insensitive' } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
+        { user: { name: { contains: search, mode: 'insensitive' } } },
+      ],
+    });
+  }
+
+  const where: Prisma.ActivityLogWhereInput = and.length ? { AND: and } : {};
+
+  const [logs, total, actionGroups] = await withDbRetry(async () => {
+    const rows = await prisma.activityLog.findMany({
+      where,
+      take,
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { email: true, name: true, role: true } } },
+    });
+    const count = await prisma.activityLog.count({ where });
+    const actions = await prisma.activityLog.groupBy({
+      by: ['action'],
+      _count: { action: true },
+      orderBy: { _count: { action: 'desc' } },
+    });
+    return [rows, count, actions] as const;
+  });
+
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const [weekCount, todayCount, uniqueUsers] = await withDbRetry(async () => {
+    const startToday = new Date();
+    startToday.setHours(0, 0, 0, 0);
+    const week = await prisma.activityLog.count({
+      where: { createdAt: { gte: weekAgo } },
+    });
+    const today = await prisma.activityLog.count({
+      where: { createdAt: { gte: startToday } },
+    });
+    const users = await prisma.activityLog.findMany({
+      where: { createdAt: { gte: weekAgo } },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+    return [week, today, users.length] as const;
+  });
 
   return {
     success: true as const,
     logs,
-    days,
+    total,
+    actions: actionGroups.map((a) => ({ action: a.action, count: a._count.action })),
+    metrics: {
+      today: todayCount,
+      last7Days: weekCount,
+      activeUsers7d: uniqueUsers,
+    },
   };
 }
