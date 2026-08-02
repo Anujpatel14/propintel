@@ -57,6 +57,7 @@ export default function RootLayout({
       >
         {/* Clerk v7 + Next 16: provider must be inside <body>, not wrapping <html> */}
         <ClerkProvider
+          publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
           dynamic
           afterSignOutUrl="/login"
           signInUrl="/login"

@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
         });
       } else if (level === 'ERROR') {
         await logError(event.message || 'Unknown error', event.stack || event.error, {
-          category: category === 'REQUEST' ? 'ERROR' : category,
+          category,
           method: event.method,
           path: event.path,
           statusCode: event.statusCode,

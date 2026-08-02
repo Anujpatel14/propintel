@@ -159,9 +159,10 @@ export async function getUserSubscriptionDetails() {
   if (stripe && sub?.stripeSubscriptionId) {
     try {
       const remote = await stripe.subscriptions.retrieve(sub.stripeSubscriptionId);
+      const remoteObj = remote as unknown as { current_period_end?: number };
       const end =
-        typeof (remote as { current_period_end?: number }).current_period_end === 'number'
-          ? new Date((remote as { current_period_end: number }).current_period_end * 1000)
+        typeof remoteObj.current_period_end === 'number'
+          ? new Date(remoteObj.current_period_end * 1000)
           : null;
       const status =
         remote.status === 'active'

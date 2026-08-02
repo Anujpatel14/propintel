@@ -103,7 +103,11 @@ export default function DashboardShell({
     } catch {
       // Still sign out even if audit write fails
     }
-    await signOut({ redirectUrl: '/login' });
+    try {
+      await signOut({ redirectUrl: '/login' });
+    } catch {
+      window.location.href = '/login';
+    }
   };
 
   const SignOutControl = ({ className }: { className?: string }) => (

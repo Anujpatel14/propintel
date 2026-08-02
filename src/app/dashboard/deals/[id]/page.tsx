@@ -81,16 +81,16 @@ export default function DealDetailPage() {
         address: a.address,
         type: typeLabel,
         metrics: [
-          { label: 'Profit', value: money(a.profit) },
-          { label: 'ROI', value: `${(a.roi || 0).toFixed(1)}%` },
-          { label: 'MAO', value: money(a.mao) },
+          { label: 'Profit', value: money('profit' in a ? a.profit : null) },
+          { label: 'ROI', value: `${(('roi' in a ? a.roi : 0) || 0).toFixed(1)}%` },
+          { label: 'MAO', value: money('mao' in a ? a.mao : null) },
         ],
         inputs: [
           { label: 'Purchase', value: a.purchasePrice },
           { label: 'Rehab', value: a.rehabCost },
-          { label: 'ARV', value: a.arv },
+          { label: 'ARV', value: 'arv' in a ? a.arv : 0 },
         ],
-        aiAnalysis: a.aiHeadline || undefined,
+        aiAnalysis: ('aiHeadline' in a ? a.aiHeadline : undefined) || undefined,
       });
     } else {
       exportToPDF({
