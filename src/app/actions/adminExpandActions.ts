@@ -4,6 +4,7 @@ import { prisma, withDbRetry } from '@/lib/db';
 import { requireAuth } from '@/lib/services/auth';
 import { Role, Prisma } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
+import { sumMrr } from '@/lib/billingMetrics';
 
 async function requireAdmin() {
   const user = await requireAuth();
@@ -80,20 +81,25 @@ export async function updateUserStatus(userId: string, status: 'ACTIVE' | 'SUSPE
 export async function getAdminRevenueMetrics() {
   await requireAdmin();
 
-  const [activeSubs, orders, failedOrders, totalUsers] = await withDbRetry(async () => {
+  const [activeSubs, orders, failedOrders, plans] = await withDbRetry(async () => {
     const active = await prisma.subscription.findMany({
-      where: { status: 'ACTIVE', plan: { in: ['PRO', 'ENTERPRISE'] } },
+      where: { status: 'ACTIVE', plan: { not: 'FREE' } },
     });
     const allOrders = await prisma.order.findMany({ orderBy: { createdAt: 'desc' }, take: 100 });
     const failed = await prisma.order.count({ where: { status: 'FAILED' } });
-    const users = await prisma.user.count();
-    return [active, allOrders, failed, users] as const;
+    const planRows = await prisma.subscriptionPlan.findMany();
+    return [active, allOrders, failed, planRows] as const;
   });
 
-  const mrr = activeSubs.reduce((sum, s) => sum + (s.plan === 'ENTERPRISE' ? 99 : 49), 0);
-  const arr = mrr * 12;
+  const mrr = sumMrr(activeSubs, plans);
+  const arr = Math.round(mrr * 12 * 100) / 100;
   const paidOrders = orders.filter((o) => o.status === 'PAID' || o.status === 'COMPLETED');
-  const churnRate = totalUsers > 0 ? Math.round((failedOrders / totalUsers) * 1000) / 10 : 0;
+  const canceled = await withDbRetry(() =>
+    prisma.subscription.count({ where: { status: 'CANCELED' } })
+  );
+  const subTotal = activeSubs.length + canceled;
+  const churnRate =
+    subTotal > 0 ? Math.round((canceled / subTotal) * 1000) / 10 : 0;
 
   return {
     success: true,
@@ -174,7 +180,7 @@ export async function getAdminApiUsage() {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take: 5,
       include: { user: { select: { email: true, name: true } } },
     });
     const analyses = await prisma.propertyAnalysis.count();
@@ -186,20 +192,104 @@ export async function getAdminApiUsage() {
 
   const estimatedTokens = analysisCount * 850;
   const estimatedCost = Math.round((estimatedTokens / 1_000_000) * 0.15 * 100) / 100;
+  const totalLogged = await withDbRetry(() =>
+    prisma.activityLog.count({
+      where: {
+        action: {
+          in: ['CREATE_ANALYSIS', 'CREATE_FLIP_ANALYSIS', 'AI_VERDICT', 'PROPERTY_LOOKUP'],
+        },
+      },
+    })
+  );
+  const aiVerdicts = await withDbRetry(() =>
+    prisma.activityLog.count({ where: { action: 'AI_VERDICT' } })
+  );
+  const aiShare =
+    totalLogged > 0 ? Math.round((aiVerdicts / totalLogged) * 1000) / 10 : 0;
 
   return {
     success: true,
     metrics: {
-      totalAiRequests: aiLogs.length,
+      totalAiRequests: totalLogged,
       totalAnalyses: analysisCount,
       estimatedTokens,
       estimatedCost,
-      avgLatencyMs: 420,
+      avgLatencyMs: null as number | null,
       propertyLookups: lookupHint,
-      fallbackRate: 92,
-      model: 'gpt-4o-mini',
+      fallbackRate: aiShare,
+      model: process.env.OPENROUTER_MODEL || 'openrouter/free',
     },
     recentLogs: aiLogs,
+  };
+}
+
+const AI_ACTIVITY_ACTIONS = [
+  'CREATE_ANALYSIS',
+  'CREATE_FLIP_ANALYSIS',
+  'AI_VERDICT',
+  'PROPERTY_LOOKUP',
+] as const;
+
+export async function getAdminAiActivity(filters?: {
+  search?: string;
+  action?: string;
+  from?: string;
+  to?: string;
+  take?: number;
+}) {
+  await requireAdmin();
+
+  const take = Math.min(Math.max(filters?.take ?? 100, 1), 500);
+  const where: Prisma.ActivityLogWhereInput = {
+    action: {
+      in: [...AI_ACTIVITY_ACTIONS],
+    },
+  };
+
+  if (filters?.action && AI_ACTIVITY_ACTIONS.includes(filters.action as (typeof AI_ACTIVITY_ACTIONS)[number])) {
+    where.action = filters.action;
+  }
+
+  if (filters?.from || filters?.to) {
+    where.createdAt = {};
+    if (filters.from) {
+      const from = new Date(filters.from);
+      from.setHours(0, 0, 0, 0);
+      where.createdAt.gte = from;
+    }
+    if (filters.to) {
+      const to = new Date(filters.to);
+      to.setHours(23, 59, 59, 999);
+      where.createdAt.lte = to;
+    }
+  }
+
+  const search = filters?.search?.trim();
+  if (search) {
+    where.OR = [
+      { details: { contains: search, mode: 'insensitive' } },
+      { action: { contains: search, mode: 'insensitive' } },
+      { user: { email: { contains: search, mode: 'insensitive' } } },
+      { user: { name: { contains: search, mode: 'insensitive' } } },
+    ];
+  }
+
+  const [logs, total] = await withDbRetry(async () => {
+    const rows = await prisma.activityLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take,
+      include: { user: { select: { email: true, name: true } } },
+    });
+    const count = await prisma.activityLog.count({ where });
+    return [rows, count] as const;
+  });
+
+  return {
+    success: true as const,
+    logs,
+    total,
+    actions: [...AI_ACTIVITY_ACTIONS],
   };
 }
 
@@ -251,6 +341,19 @@ export async function deleteCmsContent(id: string) {
 export async function getAdminCoachingSessions() {
   await requireAdmin();
 
+  // Expire past-day sessions before listing
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  await withDbRetry(() =>
+    prisma.coaching.updateMany({
+      where: {
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        bookingDate: { lt: start },
+      },
+      data: { status: 'EXPIRED' },
+    })
+  );
+
   const sessions = await withDbRetry(() =>
     prisma.coaching.findMany({
       include: { user: { select: { email: true, name: true } } },
@@ -263,7 +366,12 @@ export async function getAdminCoachingSessions() {
 
 export async function updateAdminCoachingSession(
   id: string,
-  data: { status?: string; meetingLink?: string; coachName?: string; notes?: string }
+  data: {
+    status?: string;
+    meetingLink?: string;
+    coachName?: string;
+    notes?: string;
+  }
 ) {
   await requireAdmin();
 
@@ -278,16 +386,100 @@ export async function updateAdminCoachingSession(
   return { success: true, session };
 }
 
-export async function getAdminAuditLogs() {
+export async function getAdminAuditLogs(filters?: {
+  search?: string;
+  action?: string;
+  role?: string;
+  from?: string;
+  to?: string;
+  take?: number;
+}) {
   await requireAdmin();
 
-  const logs = await withDbRetry(() =>
-    prisma.activityLog.findMany({
-      take: 100,
-      orderBy: { createdAt: 'desc' },
-      include: { user: { select: { email: true, name: true } } },
-    })
-  );
+  const take = Math.min(Math.max(filters?.take ?? 200, 1), 500);
+  const and: Prisma.ActivityLogWhereInput[] = [];
 
-  return { success: true, logs };
+  if (filters?.action && filters.action !== 'all') {
+    and.push({ action: filters.action });
+  }
+
+  if (filters?.role && (filters.role === 'ADMIN' || filters.role === 'INVESTOR')) {
+    and.push({ user: { role: filters.role } });
+  }
+
+  if (filters?.from || filters?.to) {
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (filters.from) {
+      const from = new Date(filters.from);
+      from.setHours(0, 0, 0, 0);
+      createdAt.gte = from;
+    }
+    if (filters.to) {
+      const to = new Date(filters.to);
+      to.setHours(23, 59, 59, 999);
+      createdAt.lte = to;
+    }
+    and.push({ createdAt });
+  }
+
+  const search = filters?.search?.trim();
+  if (search) {
+    and.push({
+      OR: [
+        { action: { contains: search, mode: 'insensitive' } },
+        { details: { contains: search, mode: 'insensitive' } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
+        { user: { name: { contains: search, mode: 'insensitive' } } },
+      ],
+    });
+  }
+
+  const where: Prisma.ActivityLogWhereInput = and.length ? { AND: and } : {};
+
+  const [logs, total, actionGroups] = await withDbRetry(async () => {
+    const rows = await prisma.activityLog.findMany({
+      where,
+      take,
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { email: true, name: true, role: true } } },
+    });
+    const count = await prisma.activityLog.count({ where });
+    const actions = await prisma.activityLog.groupBy({
+      by: ['action'],
+      _count: { action: true },
+      orderBy: { _count: { action: 'desc' } },
+    });
+    return [rows, count, actions] as const;
+  });
+
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const [weekCount, todayCount, uniqueUsers] = await withDbRetry(async () => {
+    const startToday = new Date();
+    startToday.setHours(0, 0, 0, 0);
+    const week = await prisma.activityLog.count({
+      where: { createdAt: { gte: weekAgo } },
+    });
+    const today = await prisma.activityLog.count({
+      where: { createdAt: { gte: startToday } },
+    });
+    const users = await prisma.activityLog.findMany({
+      where: { createdAt: { gte: weekAgo } },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+    return [week, today, users.length] as const;
+  });
+
+  return {
+    success: true as const,
+    logs,
+    total,
+    actions: actionGroups.map((a) => ({ action: a.action, count: a._count.action })),
+    metrics: {
+      today: todayCount,
+      last7Days: weekCount,
+      activeUsers7d: uniqueUsers,
+    },
+  };
 }

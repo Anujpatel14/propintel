@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { Loader2, Check, Calculator, FileText } from 'lucide-react';
+import { Check, Calculator, FileText } from 'lucide-react';
 import {
   getUnderwritingSettings,
   updateUnderwritingSettings,
 } from '@/app/actions/settingsActions';
+import PageHeader from '@/components/dashboard/PageHeader';
+import SettingsTabs from '@/components/dashboard/SettingsTabs';
+import { SkeletonFields } from '@/components/ui/Skeleton';
 
 export default function UnderwritingSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -73,150 +75,156 @@ export default function UnderwritingSettingsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-[var(--muted)]">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading defaults…
-      </div>
-    );
-  }
-
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
-      <div className="flex flex-col gap-4 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-display text-3xl tracking-tight md:text-4xl">
-            Underwriting preferences
-          </h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Default assumptions and branded PDF export settings.
-          </p>
-        </div>
-        <div className="flex gap-2 text-xs">
-          <Link
-            href="/dashboard/settings/profile"
-            className="rounded-lg border border-[var(--border)] px-3 py-2 font-semibold text-[var(--muted)] hover:bg-white"
-          >
-            Profile
-          </Link>
-          <Link
-            href="/dashboard/settings/underwriting"
-            className="rounded-lg bg-teal-700 px-3 py-2 font-bold text-white"
-          >
-            Underwriting
-          </Link>
-        </div>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Underwriting preferences"
+        description="Default deal assumptions and branded PDF export — independent from your investor profile."
+        actions={<SettingsTabs />}
+      />
 
-      <form onSubmit={handleSave} className="space-y-6">
-        <div className="surface-card space-y-5 p-6">
-          <h2 className="flex items-center gap-2 text-sm font-bold">
-            <Calculator className="h-4 w-4 text-teal-700" /> Default assumptions
-          </h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {(
-              [
-                ['defaultDownPayment', 'Down payment %'],
-                ['defaultMortgageRate', 'Mortgage rate %'],
-                ['defaultMortgageTerm', 'Loan term (years)'],
-                ['defaultVacancyRate', 'Vacancy %'],
-                ['defaultMaintenanceRate', 'Maintenance %'],
-                ['defaultClosingCost', 'Closing cost %'],
-                ['defaultSellingCommission', 'Selling commission %'],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key} className="block space-y-1.5">
+      <form onSubmit={handleSave} className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <section className="surface-card space-y-5 p-6">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-bold">
+              <Calculator className="h-4 w-4 text-teal-700" /> Default assumptions
+            </h2>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Pre-filled when you open the Property Analyzer. Change anytime.
+            </p>
+          </div>
+
+          {loading ? (
+            <SkeletonFields count={7} cols={2} />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {(
+                [
+                  ['defaultDownPayment', 'Down payment %'],
+                  ['defaultMortgageRate', 'Mortgage rate %'],
+                  ['defaultMortgageTerm', 'Loan term (years)'],
+                  ['defaultVacancyRate', 'Vacancy %'],
+                  ['defaultMaintenanceRate', 'Maintenance %'],
+                  ['defaultClosingCost', 'Closing cost %'],
+                  ['defaultSellingCommission', 'Selling commission %'],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="block space-y-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
+                    {label}
+                  </span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    className="glass-input w-full px-3 py-2.5 text-sm"
+                    value={form[key]}
+                    onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="surface-card space-y-5 p-6">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-bold">
+              <FileText className="h-4 w-4 text-teal-700" /> PDF report branding
+            </h2>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Applied when exporting underwriting dossiers for buyers or partners.
+            </p>
+          </div>
+
+          {loading ? (
+            <SkeletonFields count={5} cols={2} />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label className="block space-y-1.5 sm:col-span-2">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
-                  {label}
+                  Logo URL
                 </span>
                 <input
-                  type="number"
-                  step="0.1"
-                  className="glass-input w-full px-3 py-2 text-sm"
-                  value={form[key]}
-                  onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })}
+                  className="glass-input w-full px-3 py-2.5 text-sm"
+                  placeholder="https://…"
+                  value={form.customLogoUrl}
+                  onChange={(e) => setForm({ ...form, customLogoUrl: e.target.value })}
                 />
               </label>
-            ))}
-          </div>
-        </div>
+              <label className="block space-y-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
+                  Header title
+                </span>
+                <input
+                  className="glass-input w-full px-3 py-2.5 text-sm"
+                  value={form.customPdfHeader}
+                  onChange={(e) => setForm({ ...form, customPdfHeader: e.target.value })}
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
+                  Subtitle
+                </span>
+                <input
+                  className="glass-input w-full px-3 py-2.5 text-sm"
+                  value={form.customPdfSubtitle}
+                  onChange={(e) => setForm({ ...form, customPdfSubtitle: e.target.value })}
+                />
+              </label>
+              <label className="block space-y-1.5 sm:col-span-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
+                  Brand accent color
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    className="h-11 w-14 cursor-pointer rounded-lg border border-[var(--border)]"
+                    value={form.brandColor}
+                    onChange={(e) => setForm({ ...form, brandColor: e.target.value })}
+                  />
+                  <input
+                    className="glass-input flex-1 px-3 py-2.5 text-sm"
+                    value={form.brandColor}
+                    onChange={(e) => setForm({ ...form, brandColor: e.target.value })}
+                  />
+                </div>
+              </label>
+              <label className="block space-y-1.5 sm:col-span-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
+                  Disclaimer
+                </span>
+                <textarea
+                  rows={4}
+                  className="glass-input w-full px-3 py-2.5 text-sm"
+                  value={form.customPdfDisclaimer}
+                  onChange={(e) => setForm({ ...form, customPdfDisclaimer: e.target.value })}
+                />
+              </label>
 
-        <div className="surface-card space-y-5 p-6">
-          <h2 className="flex items-center gap-2 text-sm font-bold">
-            <FileText className="h-4 w-4 text-teal-700" /> PDF report branding
-          </h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <label className="block space-y-1.5 md:col-span-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
-                Logo URL
-              </span>
-              <input
-                className="glass-input w-full px-3 py-2 text-sm"
-                placeholder="https://…"
-                value={form.customLogoUrl}
-                onChange={(e) => setForm({ ...form, customLogoUrl: e.target.value })}
-              />
-            </label>
-            <label className="block space-y-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
-                Header title
-              </span>
-              <input
-                className="glass-input w-full px-3 py-2 text-sm"
-                value={form.customPdfHeader}
-                onChange={(e) => setForm({ ...form, customPdfHeader: e.target.value })}
-              />
-            </label>
-            <label className="block space-y-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
-                Subtitle
-              </span>
-              <input
-                className="glass-input w-full px-3 py-2 text-sm"
-                value={form.customPdfSubtitle}
-                onChange={(e) => setForm({ ...form, customPdfSubtitle: e.target.value })}
-              />
-            </label>
-            <label className="block space-y-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
-                Brand accent color
-              </span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  className="h-10 w-14 cursor-pointer rounded border border-[var(--border)]"
-                  value={form.brandColor}
-                  onChange={(e) => setForm({ ...form, brandColor: e.target.value })}
-                />
-                <input
-                  className="glass-input flex-1 px-3 py-2 text-sm"
-                  value={form.brandColor}
-                  onChange={(e) => setForm({ ...form, brandColor: e.target.value })}
-                />
+              <div
+                className="rounded-xl border border-[var(--border)] p-4 sm:col-span-2"
+                style={{ borderTopColor: form.brandColor, borderTopWidth: 3 }}
+              >
+                <div className="text-[10px] font-bold uppercase text-[var(--muted)]">Preview</div>
+                <div className="mt-1 text-sm font-bold" style={{ color: form.brandColor }}>
+                  {form.customPdfHeader || 'Report title'}
+                </div>
+                <div className="text-xs text-[var(--muted)]">{form.customPdfSubtitle}</div>
               </div>
-            </label>
-            <label className="block space-y-1.5 md:col-span-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
-                Disclaimer
-              </span>
-              <textarea
-                rows={3}
-                className="glass-input w-full px-3 py-2 text-sm"
-                value={form.customPdfDisclaimer}
-                onChange={(e) => setForm({ ...form, customPdfDisclaimer: e.target.value })}
-              />
-            </label>
-          </div>
-        </div>
+            </div>
+          )}
+        </section>
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="btn-primary inline-flex items-center gap-2 px-5 py-2.5 text-sm disabled:opacity-50"
-        >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : null}
-          {saved ? 'Saved' : saving ? 'Saving…' : 'Save preferences'}
-        </button>
+        <div className="lg:col-span-2">
+          <button
+            type="submit"
+            disabled={saving || loading}
+            className="btn-primary inline-flex min-h-11 cursor-pointer items-center gap-2 px-5 py-2.5 text-sm disabled:opacity-50"
+          >
+            {saved ? <Check className="h-4 w-4" /> : null}
+            {saved ? 'Saved' : saving ? 'Saving…' : 'Save preferences'}
+          </button>
+        </div>
       </form>
     </div>
   );

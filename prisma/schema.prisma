@@ -15,7 +15,7 @@ enum Role {
 
 model User {
   id                String             @id @default(uuid())
-  clerkId           String             @unique
+  clerkId           String?            @unique
   name              String?
   email             String             @unique
   role              Role               @default(INVESTOR)
@@ -32,6 +32,10 @@ model User {
   coachings         Coaching[]
   activities        ActivityLog[]
   orders            Order[]
+  paymentEvents     PaymentEvent[]
+  aiDealAnalyses    AiDealAnalysis[]
+  properties        Property[]
+  reports           Report[]
 }
 
 model Profile {
@@ -50,15 +54,34 @@ model Profile {
 }
 
 model Subscription {
-  id                   String   @id @default(uuid())
-  userId               String   @unique
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String    @id @default(uuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   stripeCustomerId     String?
   stripeSubscriptionId String?
-  plan                 String   @default("FREE") // e.g., "FREE", "PRO", "ENTERPRISE"
-  status               String   @default("INACTIVE") // e.g., "ACTIVE", "PAST_DUE", "CANCELED"
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  plan                 String    @default("FREE") // matches SubscriptionPlan.code
+  status               String    @default("INACTIVE") // ACTIVE, PAST_DUE, CANCELED, TRIALING
+  billingInterval      String    @default("month") // month | year
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+model SubscriptionPlan {
+  id                 String   @id @default(uuid())
+  code               String   @unique // FREE, PRO, ENTERPRISE, or custom
+  name               String
+  priceMonthly       Float    @default(0)
+  priceAnnual        Float?
+  blurb              String?
+  features           String? // newline-separated feature list
+  isActive           Boolean  @default(true)
+  sortOrder          Int      @default(0)
+  stripePriceMonthly String?
+  stripePriceAnnual  String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 model UserSettings {
@@ -88,10 +111,32 @@ model Order {
   currency        String   @default("USD")
   plan            String
   description     String?
-  status          String   @default("COMPLETED") // COMPLETED, FAILED, REFUNDED, PAID
+  status          String   @default("COMPLETED") // COMPLETED, FAILED, REFUNDED, PAID, PENDING
   stripeInvoiceId String?
+  stripePaymentId String?
   receiptUrl      String?
   createdAt       DateTime @default(now())
+}
+
+/// Stripe / billing operational events for admin diagnostics
+model PaymentEvent {
+  id              String   @id @default(uuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type            String // CHECKOUT_CREATED, CHECKOUT_COMPLETED, INVOICE_PAID, INVOICE_FAILED, REFUND, PORTAL, WEBHOOK
+  status          String   @default("OK") // OK, FAILED, PENDING
+  amount          Float?
+  currency        String?  @default("USD")
+  plan            String?
+  stripeEventId   String?  @unique
+  stripeObjectId  String?
+  description     String?
+  meta            String?  @db.Text
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([type])
+  @@index([status])
 }
 
 model CMSContent {
@@ -130,6 +175,13 @@ model PropertyAnalysis {
   capRate         Float?
   dscr            Float?
   cashOnCash      Float?
+  strategyType    String   @default("hold") // hold | rental
+  aiVerdict       String?
+  aiHeadline      String?
+  aiPayloadJson   String? // summary, strengths, risks, provider, reportText
+  isFavorite      Boolean  @default(false)
+  isArchived      Boolean  @default(false)
+  deletedAt       DateTime?
   createdAt       DateTime @default(now())
 }
 
@@ -147,6 +199,12 @@ model FlipAnalysis {
   profit        Float?
   roi           Float?
   mao           Float?
+  aiVerdict     String?
+  aiHeadline    String?
+  aiPayloadJson String?
+  isFavorite    Boolean  @default(false)
+  isArchived    Boolean  @default(false)
+  deletedAt     DateTime?
   createdAt     DateTime @default(now())
 }
 
@@ -184,17 +242,18 @@ model DealPipeline {
 }
 
 model Coaching {
-  id            String   @id @default(uuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bookingDate   DateTime
-  status        String   @default("PENDING") // "PENDING", "CONFIRMED", "COMPLETED", "CANCELED"
-  meetingLink   String?
-  paymentStatus String   @default("UNPAID") // "PAID", "UNPAID"
-  coachName     String?
-  topic         String?
-  notes         String?
-  createdAt     DateTime @default(now())
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookingDate     DateTime
+  status          String   @default("PENDING") // PENDING, CONFIRMED, COMPLETED, CANCELED, EXPIRED
+  meetingLink     String?
+  calendarEventId String?
+  paymentStatus   String   @default("UNPAID") // PAID, UNPAID
+  coachName       String?
+  topic           String?
+  notes           String?
+  createdAt       DateTime @default(now())
 }
 
 model ActivityLog {
@@ -204,4 +263,81 @@ model ActivityLog {
   action    String // "LOGIN", "CREATE_ANALYSIS", "EXPORT_REPORT", "UPDATE_SUBSCRIPTION", etc.
   details   String?
   createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, action])
+}
+
+/**
+ * Investor-owned property inventory (imported from ATTOM or entered manually).
+ * After import, Analyzer / AI / CRM use this row — not live ATTOM responses.
+ */
+model Property {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attomId         String?
+  address         String
+  city            String
+  state           String
+  zip             String
+  latitude        Float?
+  longitude       Float?
+  propertyType    String?
+  bedrooms        Float?
+  bathrooms       Float?
+  yearBuilt       Int?
+  squareFeet      Float?
+  lotSize         Float?
+  estimatedValue  Float?
+  estimatedRent   Float?
+  taxAmount       Float?
+  apn             String?
+  ownerOccupied   Boolean?
+  notes           String?  @db.Text
+  rawJson         String?  @db.Text
+  source          String   @default("ATTOM") // ATTOM | MANUAL | CSV | MLS
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, attomId])
+  @@index([userId, createdAt])
+  @@index([zip])
+}
+
+/** Generated / downloaded investor reports */
+model Report {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String // FINANCIAL | PROPERTY | RENTAL | FLIP | PORTFOLIO
+  title       String
+  address     String?
+  status      String   @default("READY") // READY | FAILED
+  payloadJson String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, type])
+}
+
+/** Saved AI / rule-engine underwriting verdicts for the deal analyzer */
+model AiDealAnalysis {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address         String
+  modelType       String   @default("hold") // hold | flip | rental
+  provider        String // openrouter | rules
+  modelName       String?
+  verdict         String // STRONG BUY | ACQUIRE WITH CAUTION | PASS OR RE-NEGOTIATE
+  headline        String?
+  summaryJson     String // JSON: { label, value }[]
+  strengthsJson   String // JSON: { title, detail }[]
+  risksJson       String // JSON: { title, detail }[]
+  metricsJson     String // JSON snapshot of inputs/outputs used
+  reportMarkdown  String? // plain text for PDF / export
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
 }

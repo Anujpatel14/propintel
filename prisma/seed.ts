@@ -6,20 +6,23 @@ async function main() {
   console.log('🌱 Starting database seeding...');
 
   // 1. Clean existing records (optional for re-seeding)
+  await prisma.paymentEvent.deleteMany({});
   await prisma.activityLog.deleteMany({});
   await prisma.coaching.deleteMany({});
   await prisma.dealPipeline.deleteMany({});
   await prisma.rentalAnalysis.deleteMany({});
   await prisma.flipAnalysis.deleteMany({});
   await prisma.propertyAnalysis.deleteMany({});
+  await prisma.order.deleteMany({});
+  await prisma.cMSContent.deleteMany({});
+  await prisma.userSettings.deleteMany({});
   await prisma.subscription.deleteMany({});
   await prisma.profile.deleteMany({});
   await prisma.user.deleteMany({});
 
-  // 2. Create Demo Investor User
+  // 2. Create Demo Investor User (linked when they sign in with Clerk using this email)
   const investor = await prisma.user.create({
     data: {
-      clerkId: 'mock_clerk_investor_123',
       email: 'investor@propintel.com',
       name: 'Alex Investor',
       role: 'INVESTOR',
@@ -32,8 +35,6 @@ async function main() {
       },
       subscription: {
         create: {
-          stripeCustomerId: 'cus_demo_investor',
-          stripeSubscriptionId: 'sub_demo_investor_pro',
           plan: 'PRO',
           status: 'ACTIVE',
         },
@@ -44,7 +45,6 @@ async function main() {
   // 3. Create Demo Admin User
   const admin = await prisma.user.create({
     data: {
-      clerkId: 'mock_clerk_admin_456',
       email: 'admin@propintel.com',
       name: 'Sarah Admin',
       role: 'ADMIN',
@@ -57,8 +57,6 @@ async function main() {
       },
       subscription: {
         create: {
-          stripeCustomerId: 'cus_demo_admin',
-          stripeSubscriptionId: 'sub_demo_admin_ent',
           plan: 'ENTERPRISE',
           status: 'ACTIVE',
         },
@@ -67,6 +65,8 @@ async function main() {
   });
 
   console.log(`👤 Created Users: ${investor.email} (INVESTOR), ${admin.email} (ADMIN)`);
+  console.log('   Sign in via Clerk with these emails to link accounts.');
+
 
   // 4. Seed Property Analyses for Investor
   await prisma.propertyAnalysis.createMany({

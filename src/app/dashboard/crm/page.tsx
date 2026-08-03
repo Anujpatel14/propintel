@@ -16,6 +16,8 @@ import {
   deleteDeal,
   getUserDeals,
 } from '@/app/actions/crmActions';
+import PageHeader from '@/components/dashboard/PageHeader';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 interface LeadItem {
   id: string;
@@ -90,7 +92,7 @@ export default function CRMPipelinePage() {
     } catch (e) {
       console.error(e);
       const message =
-        e instanceof Error ? e.message : 'Failed to load pipeline from the database.';
+        e instanceof Error ? e.message : 'Couldn’t load your pipeline. Please try again.';
       setLoadError(message);
     } finally {
       setIsLoading(false);
@@ -163,26 +165,36 @@ export default function CRMPipelinePage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
-      <div className="flex flex-col items-start justify-between gap-4 border-b border-[var(--border)] pb-6 md:flex-row md:items-center">
-        <div>
-          <h1 className="font-display text-3xl tracking-tight text-foreground md:text-4xl">
-            Deal CRM pipeline
-          </h1>
-          <p className="text-sm text-[var(--muted)]">
-            Track purchase prospects, manage follow-up timers, and log assignment revenue.
-          </p>
-        </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex cursor-pointer items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white shadow-lg transition-all hover:bg-teal-600"
-        >
-          <Plus className="h-4 w-4" /> Add CRM Lead
-        </button>
-      </div>
+      <PageHeader
+        title="Deal pipeline"
+        description="Track prospects, follow-ups, and assignment revenue."
+        actions={
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="btn-primary inline-flex cursor-pointer items-center gap-2 px-4 py-2.5 text-sm"
+          >
+            <Plus className="h-4 w-4" /> Add CRM Lead
+          </button>
+        }
+      />
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-20 text-[var(--muted)]">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading pipeline…
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {COLUMNS.map((col) => (
+            <div
+              key={col.key}
+              className={`flex w-[min(85vw,260px)] shrink-0 flex-col space-y-3 rounded-xl border border-[var(--border)] border-t-2 p-4 md:w-[220px] ${col.color}`}
+            >
+              <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
+                <span className="text-xs font-extrabold tracking-wide text-foreground uppercase">
+                  {col.title}
+                </span>
+                <Skeleton className="h-5 w-6 rounded-md" />
+              </div>
+              <Skeleton className="h-24 w-full rounded-xl" />
+              <Skeleton className="h-24 w-full rounded-xl" />
+            </div>
+          ))}
         </div>
       ) : loadError ? (
         <div className="space-y-4 rounded-xl border border-red-500/20 bg-red-50 p-6 text-center">
@@ -192,20 +204,20 @@ export default function CRMPipelinePage() {
               setIsLoading(true);
               loadDeals();
             }}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-teal-600"
+            className="btn-primary inline-flex cursor-pointer items-center gap-2 px-4 py-2.5 text-xs"
           >
             Retry connection
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 overflow-x-auto pb-4 md:grid-cols-3 lg:grid-cols-6">
+        <div className="flex gap-4 overflow-x-auto overscroll-x-contain pb-4 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:thin]">
           {COLUMNS.map((col) => {
             const colLeads = leads.filter((l) => l.stage === col.key);
 
             return (
               <div
                 key={col.key}
-                className={`flex w-full min-w-[200px] flex-col space-y-4 rounded-xl border border-[var(--border)] border-t-2 p-4 ${col.color}`}
+                className={`flex w-[min(85vw,260px)] shrink-0 snap-start flex-col space-y-3 rounded-xl border border-[var(--border)] border-t-2 p-4 md:w-[220px] ${col.color}`}
               >
                 <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
                   <span className="text-xs font-extrabold tracking-wide text-foreground uppercase">
@@ -216,7 +228,7 @@ export default function CRMPipelinePage() {
                   </span>
                 </div>
 
-                <div className="min-h-[300px] flex-1 space-y-4 overflow-y-auto">
+                <div className="max-h-[min(60vh,480px)] min-h-[220px] flex-1 space-y-3 overflow-y-auto overscroll-contain">
                   <AnimatePresence mode="popLayout">
                     {colLeads.map((lead) => (
                       <motion.div
@@ -265,7 +277,7 @@ export default function CRMPipelinePage() {
                               onClick={() =>
                                 setActiveMenuId(activeMenuId === lead.id ? null : lead.id)
                               }
-                              className="cursor-pointer rounded p-1 text-[var(--muted-foreground)] transition-all hover:bg-[var(--surface-soft)] hover:text-foreground"
+                              className="cursor-pointer rounded-lg p-2 text-[var(--muted-foreground)] transition-all hover:bg-[var(--surface-soft)] hover:text-foreground"
                             >
                               <MoreVertical className="h-3.5 w-3.5" />
                             </button>
@@ -308,8 +320,14 @@ export default function CRMPipelinePage() {
       )}
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-6 backdrop-blur-sm">
-          <div className="glass-panel relative w-full max-w-md space-y-6 rounded-2xl border border-[var(--border)] p-8">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-md sm:p-6"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            className="glass-panel relative max-h-[90dvh] w-full max-w-md space-y-6 overflow-y-auto rounded-2xl border border-[var(--border)] p-6 sm:p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-4">
               <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
                 <Layers className="h-5 w-5 text-teal-800" /> New Pipeline Lead
@@ -409,7 +427,7 @@ export default function CRMPipelinePage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-teal-700 py-3 text-xs font-bold text-white shadow-lg transition-all hover:bg-teal-600 disabled:opacity-50"
+                className="btn-primary flex w-full cursor-pointer items-center justify-center gap-2 py-3 text-xs disabled:opacity-50"
               >
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 {isSubmitting ? 'Saving…' : 'Add Lead to Board'}

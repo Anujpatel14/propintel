@@ -21,7 +21,7 @@
 ## 1. `cursor_task_handover.md` — verification
 
 ### Backend (Part 1) — complete
-- Neon + Prisma models, Clerk + sandbox auth, seed accounts, server actions layer — present and used.
+- Neon + Prisma models, Clerk auth (no sandbox), seed accounts, server actions layer — present and used.
 
 ### Wiring tasks (Part 2)
 

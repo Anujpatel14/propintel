@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
+import PageHeader from '@/components/dashboard/PageHeader';
+import { SkeletonRows } from '@/components/ui/Skeleton';
 import {
   getCmsContent,
   upsertCmsContent,
@@ -106,21 +108,19 @@ export default function AdminCmsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <h1 className="font-display text-3xl tracking-tight">CMS & landing content</h1>
-        <p className="text-sm text-[var(--muted)]">
-          Manage FAQs, testimonials, and announcement banners.
-        </p>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="CMS & landing content"
+        description="Manage FAQs, testimonials, and announcement banners."
+      />
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {['FAQ', 'TESTIMONIAL', 'ANNOUNCEMENT', 'PRICING'].map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`cursor-pointer rounded-lg px-3 py-2 text-xs font-bold ${
+            className={`min-h-10 cursor-pointer rounded-lg px-3 py-2 text-xs font-bold ${
               tab === t ? 'bg-teal-700 text-white' : 'border border-[var(--border)] text-[var(--muted)]'
             }`}
           >
@@ -130,8 +130,8 @@ export default function AdminCmsPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12 text-[var(--muted)]">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading…
+        <div className="surface-card space-y-4 p-5">
+          <SkeletonRows rows={6} cols={3} />
         </div>
       ) : (
         <div className="space-y-6">
@@ -154,7 +154,7 @@ export default function AdminCmsPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-teal-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+                className="btn-primary inline-flex cursor-pointer items-center gap-2 px-4 py-2 text-xs disabled:opacity-50"
               >
                 <Plus className="h-3.5 w-3.5" /> Add FAQ
               </button>
@@ -164,7 +164,7 @@ export default function AdminCmsPage() {
           {tab === 'TESTIMONIAL' && (
             <form onSubmit={handleAddTestimonial} className="surface-card space-y-3 p-5">
               <h2 className="text-sm font-bold">Add testimonial</h2>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <input
                   className="glass-input px-3 py-2 text-sm"
                   placeholder="Investor name"
@@ -199,7 +199,7 @@ export default function AdminCmsPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-teal-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+                className="btn-primary inline-flex cursor-pointer items-center gap-2 px-4 py-2 text-xs disabled:opacity-50"
               >
                 <Plus className="h-3.5 w-3.5" /> Add testimonial
               </button>
@@ -227,7 +227,7 @@ export default function AdminCmsPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="cursor-pointer rounded-xl bg-teal-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+                className="btn-primary cursor-pointer px-4 py-2 text-xs disabled:opacity-50"
               >
                 Save announcement
               </button>
@@ -263,7 +263,7 @@ export default function AdminCmsPage() {
                     setSaving(false);
                   }
                 }}
-                className="cursor-pointer rounded-xl bg-teal-700 px-4 py-2 text-xs font-bold text-white"
+                className="btn-primary cursor-pointer px-4 py-2 text-xs"
               >
                 Seed default pricing JSON
               </button>

@@ -1,20 +1,27 @@
+import PageHeader from '@/components/dashboard/PageHeader';
+
 export default function AdminSettingsPage() {
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="font-display text-3xl tracking-tight">Platform settings</h1>
-        <p className="text-sm text-[var(--muted)]">
-          API keys and maintenance mode. Values are read from environment in V1.
-        </p>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Platform settings"
+        description="API keys and maintenance mode. Values are read from environment in V1."
+      />
 
-      <div className="surface-card space-y-4 p-6 text-sm">
+      <div className="mx-auto max-w-3xl surface-card space-y-4 p-6 text-sm">
         {[
-          ['OpenAI API key', 'OPENAI_API_KEY'],
+          ['OpenRouter API key', 'OPENROUTER_API_KEY'],
+          ['OpenRouter model', 'OPENROUTER_MODEL (default openrouter/free)'],
+          ['OpenAI API key (optional)', 'OPENAI_API_KEY'],
           ['Property API key', 'RENTCAST_API_KEY / ATTOM'],
           ['Google Maps key', 'NEXT_PUBLIC_GOOGLE_MAPS_KEY'],
+          ['Google Meet client ID', 'GOOGLE_CLIENT_ID'],
+          ['Google Meet client secret', 'GOOGLE_CLIENT_SECRET'],
+          ['Google Meet refresh token', 'GOOGLE_REFRESH_TOKEN'],
+          ['Google Calendar ID', 'GOOGLE_CALENDAR_ID'],
           ['Clerk publishable', 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY'],
           ['Stripe secret', 'STRIPE_SECRET_KEY'],
+          ['Stripe webhook secret', 'STRIPE_WEBHOOK_SECRET'],
         ].map(([label, env]) => (
           <label key={env} className="block space-y-1">
             <span className="text-[10px] font-bold uppercase text-[var(--muted)]">{label}</span>

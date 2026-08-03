@@ -1,7 +1,7 @@
-import { cookies } from 'next/headers';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { prisma, withDbRetry } from '../db';
 import { Role } from '@prisma/client';
+import { logError, recordAudit } from '@/lib/logger';
 
 export interface UserSession {
   id: string;
@@ -10,24 +10,6 @@ export interface UserSession {
   role: Role;
   clerkId: string;
 }
-
-const MOCK_INVESTOR: UserSession = {
-  id: 'mock-investor-id-12345',
-  email: 'investor@propintel.com',
-  name: 'Alex Investor',
-  role: 'INVESTOR',
-  clerkId: 'mock_clerk_investor_123',
-};
-
-const MOCK_ADMIN: UserSession = {
-  id: 'mock-admin-id-67890',
-  email: 'admin@propintel.com',
-  name: 'Sarah Admin',
-  role: 'ADMIN',
-  clerkId: 'mock_clerk_admin_456',
-};
-
-export const MOCK_USERS = [MOCK_INVESTOR, MOCK_ADMIN];
 
 function isDbConnectivityError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -40,221 +22,211 @@ function isDbConnectivityError(error: unknown): boolean {
     message.includes('ECONNRESET') ||
     message.includes('ETIMEDOUT') ||
     message.includes('Database is temporarily unavailable') ||
-    message.includes('Prisma client is outdated')
+    message.includes('Prisma client is outdated') ||
+    message.includes('Unique constraint') ||
+    message.includes('P2002')
   );
 }
 
-/**
- * Ensures a sandbox/demo user exists in Neon and returns the DB-backed session.
- */
-async function ensureSandboxUserInDb(session: UserSession): Promise<UserSession> {
-  return withDbRetry(async () => {
-    let dbUser = await prisma.user.findUnique({
-      where: { email: session.email },
-      include: { profile: true, subscription: true },
-    });
+function resolveRole(email: string, existing?: Role | null): Role {
+  if (existing === 'ADMIN') return 'ADMIN';
+  if (email.toLowerCase() === 'admin@propintel.com') return 'ADMIN';
+  return existing || 'INVESTOR';
+}
 
-    if (!dbUser) {
-      dbUser = await prisma.user.create({
-        data: {
-          clerkId: session.clerkId,
-          email: session.email,
-          name: session.name,
-          role: session.role,
-          status: 'ACTIVE',
-          profile: {
-            create: {
-              phone: '+1 (555) 019-2834',
-              company: session.role === 'INVESTOR' ? 'Apex Equity Partners' : 'PropIntel Corp',
-              investorType:
-                session.role === 'INVESTOR'
-                  ? 'Fix & Flip / Buy & Hold'
-                  : 'Platform Administrator',
-            },
-          },
-          subscription: {
-            create: {
-              plan: session.role === 'INVESTOR' ? 'PRO' : 'ENTERPRISE',
-              status: 'ACTIVE',
-            },
-          },
-        },
-        include: { profile: true, subscription: true },
-      });
-    } else if (dbUser.role !== session.role || dbUser.name !== session.name) {
-      // Keep sandbox accounts aligned with mock roles (e.g. admin@ always ADMIN)
-      dbUser = await prisma.user.update({
-        where: { id: dbUser.id },
-        data: {
-          role: session.role,
-          name: session.name,
-          status: 'ACTIVE',
-        },
-        include: { profile: true, subscription: true },
+function toSession(
+  dbUser: { id: string; email: string; name: string | null; role: Role; clerkId: string | null },
+  fallbackName: string,
+  clerkId: string
+): UserSession {
+  return {
+    id: dbUser.id,
+    email: dbUser.email,
+    name: dbUser.name || fallbackName,
+    role: dbUser.role,
+    clerkId: dbUser.clerkId || clerkId,
+  };
+}
+
+/** At most one LOGIN audit row per user per 12 hours. */
+async function maybeRecordLogin(userId: string) {
+  try {
+    const since = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    const recent = await withDbRetry(() =>
+      prisma.activityLog.findFirst({
+        where: { userId, action: 'LOGIN', createdAt: { gte: since } },
+        select: { id: true },
+      })
+    );
+    if (!recent) {
+      await recordAudit({
+        userId,
+        action: 'LOGIN',
+        details: 'Signed in via Clerk',
       });
     }
-
-    return {
-      id: dbUser.id,
-      email: dbUser.email,
-      name: dbUser.name || session.name,
-      role: dbUser.role,
-      clerkId: dbUser.clerkId,
-    };
-  });
+  } catch {
+    // non-blocking
+  }
 }
 
 /**
- * Syncs a Clerk user into Neon PostgreSQL database User, Profile, and Subscription tables.
+ * Syncs a Clerk user into the PropIntel User / Profile / Subscription tables.
  */
 export async function syncClerkUserToDb(
   clerkId: string,
   email: string,
   name?: string
 ): Promise<UserSession> {
+  const normalized = email.trim().toLowerCase();
+  const displayName = name || normalized.split('@')[0];
+
   return withDbRetry(async () => {
-    let dbUser = await prisma.user.findUnique({
-      where: { clerkId },
-      include: { profile: true, subscription: true },
-    });
+    // 1) Prefer clerkId match
+    let dbUser = await prisma.user.findUnique({ where: { clerkId } });
+
+    // 2) Else link by email (seeded / previous account)
+    if (!dbUser) {
+      dbUser = await prisma.user.findUnique({ where: { email: normalized } });
+      if (dbUser) {
+        // Clear this clerkId from any other row that might hold it
+        await prisma.user.updateMany({
+          where: { clerkId, NOT: { id: dbUser.id } },
+          data: { clerkId: null },
+        });
+        dbUser = await prisma.user.update({
+          where: { id: dbUser.id },
+          data: {
+            clerkId,
+            name: name || dbUser.name || displayName,
+            status: 'ACTIVE',
+            role: resolveRole(normalized, dbUser.role),
+          },
+        });
+        return toSession(dbUser, displayName, clerkId);
+      }
+    }
 
     if (!dbUser) {
-      dbUser = await prisma.user.create({
+      const role = resolveRole(normalized, null);
+      try {
+        dbUser = await prisma.user.create({
+          data: {
+            clerkId,
+            email: normalized,
+            name: displayName,
+            role,
+            status: 'ACTIVE',
+            profile: {
+              create: {
+                phone: '',
+                company: role === 'ADMIN' ? 'PropIntel Corp' : 'Real Estate Investor',
+                investorType:
+                  role === 'ADMIN' ? 'Platform Administrator' : 'Fix & Flip / Buy & Hold',
+              },
+            },
+            subscription: {
+              create: {
+                plan: role === 'ADMIN' ? 'ENTERPRISE' : 'FREE',
+                status: 'ACTIVE',
+              },
+            },
+          },
+        });
+      } catch (err) {
+        // Race / unique: fetch again by clerkId or email
+        dbUser =
+          (await prisma.user.findUnique({ where: { clerkId } })) ||
+          (await prisma.user.findUnique({ where: { email: normalized } }));
+        if (!dbUser) throw err;
+        if (!dbUser.clerkId) {
+          dbUser = await prisma.user.update({
+            where: { id: dbUser.id },
+            data: { clerkId, status: 'ACTIVE' },
+          });
+        }
+      }
+      return toSession(dbUser, displayName, clerkId);
+    }
+
+    // Existing clerkId match — keep profile fresh
+    const role = resolveRole(normalized, dbUser.role);
+    if (
+      dbUser.role !== role ||
+      (name && dbUser.name !== displayName) ||
+      dbUser.status !== 'ACTIVE' ||
+      dbUser.email !== normalized
+    ) {
+      dbUser = await prisma.user.update({
+        where: { id: dbUser.id },
         data: {
-          clerkId,
-          email,
-          name: name || 'Investor User',
-          role: 'INVESTOR',
-          profile: {
-            create: {
-              phone: '',
-              company: 'Real Estate Investor',
-              investorType: 'Fix & Flip / Buy & Hold',
-            },
-          },
-          subscription: {
-            create: {
-              plan: 'PRO',
-              status: 'ACTIVE',
-            },
-          },
+          role,
+          name: name || dbUser.name || displayName,
+          status: 'ACTIVE',
+          email: normalized,
         },
-        include: { profile: true, subscription: true },
       });
     }
 
-    return {
-      id: dbUser.id,
-      email: dbUser.email,
-      name: dbUser.name || 'Investor User',
-      role: dbUser.role,
-      clerkId: dbUser.clerkId,
-    };
+    return toSession(dbUser, displayName, clerkId);
   });
 }
 
 /**
- * Gets the current active user session.
- * Tries Sandbox cookie first (for quick demo mode), then falls back to Clerk authentication.
+ * Current user from Clerk session, synced into the local database.
  */
 export async function getCurrentUser(): Promise<UserSession | null> {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('propintel_session');
-
-    if (sessionCookie?.value) {
-      const session = JSON.parse(sessionCookie.value) as UserSession;
-
-      try {
-        return await ensureSandboxUserInDb(session);
-      } catch (dbErr) {
-        console.error('Sandbox session DB resolve failed:', dbErr);
-        // Soft-fail so layouts can redirect to login instead of hard-crashing
-        if (isDbConnectivityError(dbErr)) {
-          return null;
-        }
-        return null;
-      }
-    }
-  } catch (cookieErr) {
-    console.error('Sandbox cookie parse failed:', cookieErr);
-  }
-
-  try {
     const clerkAuth = await auth();
-    if (clerkAuth?.userId) {
-      const user = await currentUser();
-      const email = user?.emailAddresses[0]?.emailAddress;
-      if (email) {
-        const name =
-          `${user.firstName || ''} ${user.lastName || ''}`.trim() ||
-          user.username ||
-          undefined;
-        return await syncClerkUserToDb(clerkAuth.userId, email, name);
-      }
-    }
-  } catch (clerkErr) {
-    if (isDbConnectivityError(clerkErr)) {
-      console.error('Clerk user DB sync failed:', clerkErr);
+    if (!clerkAuth?.userId) return null;
+
+    const user = await currentUser();
+    const email =
+      user?.primaryEmailAddress?.emailAddress ||
+      user?.emailAddresses?.[0]?.emailAddress;
+    if (!email) {
+      // Clerk session without email yet — treat as incomplete, not logged out
+      void logError('Clerk user missing email', new Error('no email'), {
+        category: 'AUTH',
+        meta: { clerkId: clerkAuth.userId },
+      });
       return null;
     }
-  }
 
-  return null;
-}
+    const name =
+      `${user?.firstName || ''} ${user?.lastName || ''}`.trim() ||
+      user?.username ||
+      undefined;
 
-/**
- * Logs in a simulated user by ensuring Neon row exists, then setting a secure cookie.
- */
-export async function signInMockUser(email: string): Promise<UserSession | null> {
-  const targetUser = MOCK_USERS.find((u) => u.email.toLowerCase() === email.toLowerCase());
-  if (!targetUser) return null;
-
-  // Ensure DB user exists BEFORE setting cookie so the next request can resolve auth
-  let dbSession: UserSession;
-  try {
-    dbSession = await ensureSandboxUserInDb(targetUser);
+    const session = await syncClerkUserToDb(clerkAuth.userId, email, name);
+    void maybeRecordLogin(session.id);
+    return session;
   } catch (err) {
-    console.error('Login DB sync failed:', err);
-    const detail = err instanceof Error ? err.message : String(err);
-    if (detail.includes('outdated') || detail.includes('prisma generate')) {
-      throw new Error(detail);
-    }
-    throw new Error(
-      'Database is waking up or unreachable. Wait a few seconds and try the sandbox login again.'
-    );
+    void logError('getCurrentUser failed', err, { category: 'AUTH' });
+    return null;
   }
-
-  const cookieStore = await cookies();
-  cookieStore.set(
-    'propintel_session',
-    JSON.stringify({
-      ...targetUser,
-      id: dbSession.id,
-    }),
-    {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7,
-    }
-  );
-
-  return dbSession;
 }
 
 /**
- * Signs out the simulated user.
+ * Like getCurrentUser, but distinguishes "no Clerk session" vs "sync failed".
  */
-export async function signOutMockUser(): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.delete('propintel_session');
+export async function resolveAppUser(): Promise<
+  | { status: 'anonymous' }
+  | { status: 'ready'; user: UserSession }
+  | { status: 'sync_error'; clerkId: string }
+> {
+  const clerkAuth = await auth();
+  if (!clerkAuth?.userId) return { status: 'anonymous' };
+
+  try {
+    const user = await getCurrentUser();
+    if (user) return { status: 'ready', user };
+    return { status: 'sync_error', clerkId: clerkAuth.userId };
+  } catch {
+    return { status: 'sync_error', clerkId: clerkAuth.userId };
+  }
 }
 
-/**
- * Validates that user is authenticated, otherwise throws error.
- */
 export async function requireAuth(): Promise<UserSession> {
   const user = await getCurrentUser();
   if (!user) {

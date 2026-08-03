@@ -32,7 +32,7 @@ export default function SpotlightCard({
       onMouseMove={handleMouseMove}
       onMouseEnter={() => setIsFocused(true)}
       onMouseLeave={() => setIsFocused(false)}
-      className={`relative overflow-hidden rounded-2xl border border-[var(--border)] bg-white p-6 shadow-[var(--shadow-soft)] transition-all duration-300 hover:border-teal-700/25 ${className}`}
+      className={`relative overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-[var(--shadow-soft)] transition-all duration-300 hover:border-teal-700/25 ${className.includes('p-') ? '' : 'p-6'} ${className}`}
     >
       <div
         className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 transition-opacity duration-300"
