@@ -23,12 +23,12 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   }
 
   if (resolved.status === 'db_unavailable') {
-    return <DatabaseUnavailable />;
+    return <DatabaseUnavailable detail={resolved.reason} />;
   }
 
   if (resolved.status === 'sync_error') {
     // Keep the Clerk session — signing out here dumped new signups back on /login.
-    return <AuthSyncError clerkId={resolved.clerkId} />;
+    return <AuthSyncError clerkId={resolved.clerkId} reason={resolved.reason} />;
   }
 
   if (resolved.status === 'suspended') {

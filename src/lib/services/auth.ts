@@ -12,8 +12,13 @@ export interface UserSession {
   status: string;
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 function isDbConnectivityError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorMessage(error);
   return (
     message.includes("Can't reach database server") ||
     message.includes('terminating connection') ||
@@ -24,12 +29,13 @@ function isDbConnectivityError(error: unknown): boolean {
     message.includes('ETIMEDOUT') ||
     message.includes('Database is temporarily unavailable') ||
     message.includes('Prisma client is outdated') ||
-    message.includes('Unique constraint') ||
-    message.includes('P2002') ||
     message.includes('Environment variable not found: DATABASE_URL') ||
     message.includes('PrismaClientInitializationError') ||
-    message.includes('Can\'t reach database') ||
-    message.includes('datasource url')
+    message.includes("Can't reach database") ||
+    message.includes('datasource url') ||
+    message.includes('does not exist in the current database') ||
+    message.includes('P2021') ||
+    message.includes('P1003')
   );
 }
 
@@ -77,20 +83,54 @@ async function maybeRecordLogin(userId: string) {
         select: { id: true },
       })
     );
-    if (!recent) {
-      await recordAudit({
-        userId,
-        action: 'LOGIN',
-        details: 'Signed in via Clerk',
-      });
-    }
+    if (recent) return;
+    await recordAudit({
+      userId,
+      action: 'LOGIN',
+      details: 'Signed in via Clerk',
+    });
   } catch {
-    // non-blocking
+    // non-blocking — never fail auth because of audit logging
+  }
+}
+
+async function ensureProfileAndSubscription(
+  userId: string,
+  role: Role
+): Promise<void> {
+  try {
+    await prisma.profile.upsert({
+      where: { userId },
+      create: {
+        userId,
+        company: role === 'ADMIN' ? 'PropIntel Corp' : 'Real Estate Investor',
+        investorType:
+          role === 'ADMIN' ? 'Platform Administrator' : 'Fix & Flip / Buy & Hold',
+      },
+      update: {},
+    });
+  } catch (err) {
+    void logError('ensureProfile failed', err, { category: 'AUTH', meta: { userId } });
+  }
+
+  try {
+    await prisma.subscription.upsert({
+      where: { userId },
+      create: {
+        userId,
+        plan: role === 'ADMIN' ? 'ENTERPRISE' : 'FREE',
+        status: 'ACTIVE',
+      },
+      update: {},
+    });
+  } catch (err) {
+    void logError('ensureSubscription failed', err, { category: 'AUTH', meta: { userId } });
   }
 }
 
 /**
- * Syncs a Clerk user into the PropIntel User / Profile / Subscription tables.
+ * Syncs a Clerk user into the PropIntel User table (then best-effort profile/subscription).
+ * Core user row creation must succeed for dashboard access.
  */
 export async function syncClerkUserToDb(
   clerkId: string,
@@ -98,37 +138,33 @@ export async function syncClerkUserToDb(
   name?: string
 ): Promise<UserSession> {
   const normalized = email.trim().toLowerCase();
-  const displayName = name || normalized.split('@')[0];
+  const displayName = (name || normalized.split('@')[0] || 'Investor').trim() || 'Investor';
 
   return withDbRetry(async () => {
-    // 1) Prefer clerkId match
-    let dbUser = await prisma.user.findUnique({ where: { clerkId } });
+    let dbUser =
+      (await prisma.user.findUnique({ where: { clerkId } })) ||
+      (await prisma.user.findUnique({ where: { email: normalized } }));
 
-    // 2) Else link by email (seeded / previous account)
-    if (!dbUser) {
-      dbUser = await prisma.user.findUnique({ where: { email: normalized } });
-      if (dbUser) {
-        // Clear this clerkId from any other row that might hold it
-        await prisma.user.updateMany({
-          where: { clerkId, NOT: { id: dbUser.id } },
-          data: { clerkId: null },
-        });
-        dbUser = await prisma.user.update({
-          where: { id: dbUser.id },
-          data: {
-            clerkId,
-            name: name || dbUser.name || displayName,
-            // Preserve admin suspensions — do not force ACTIVE
-            role: resolveRole(normalized, dbUser.role),
-          },
-        });
-        return toSession(dbUser, displayName, clerkId);
-      }
+    if (dbUser && dbUser.clerkId !== clerkId) {
+      // Link existing email account to this Clerk id
+      await prisma.user.updateMany({
+        where: { clerkId, NOT: { id: dbUser.id } },
+        data: { clerkId: null },
+      });
+      dbUser = await prisma.user.update({
+        where: { id: dbUser.id },
+        data: {
+          clerkId,
+          name: name || dbUser.name || displayName,
+          role: resolveRole(normalized, dbUser.role),
+        },
+      });
     }
 
     if (!dbUser) {
       const role = resolveRole(normalized, null);
       try {
+        // Create the core row only — nested creates used to fail the whole signup.
         dbUser = await prisma.user.create({
           data: {
             clerkId,
@@ -136,55 +172,46 @@ export async function syncClerkUserToDb(
             name: displayName,
             role,
             status: 'ACTIVE',
-            profile: {
-              create: {
-                phone: '',
-                company: role === 'ADMIN' ? 'PropIntel Corp' : 'Real Estate Investor',
-                investorType:
-                  role === 'ADMIN' ? 'Platform Administrator' : 'Fix & Flip / Buy & Hold',
-              },
-            },
-            subscription: {
-              create: {
-                plan: role === 'ADMIN' ? 'ENTERPRISE' : 'FREE',
-                status: 'ACTIVE',
-              },
-            },
           },
         });
       } catch (err) {
-        // Race / unique: fetch again by clerkId or email
         dbUser =
           (await prisma.user.findUnique({ where: { clerkId } })) ||
           (await prisma.user.findUnique({ where: { email: normalized } }));
         if (!dbUser) throw err;
-        if (!dbUser.clerkId) {
+        if (dbUser.clerkId !== clerkId) {
           dbUser = await prisma.user.update({
             where: { id: dbUser.id },
             data: { clerkId },
           });
         }
       }
-      return toSession(dbUser, displayName, clerkId);
+    } else {
+      // Keep profile fields fresh; never clear SUSPENDED here
+      const role = resolveRole(normalized, dbUser.role);
+      const needsUpdate =
+        dbUser.role !== role ||
+        (name && dbUser.name !== displayName) ||
+        dbUser.email !== normalized ||
+        dbUser.clerkId !== clerkId;
+      if (needsUpdate) {
+        try {
+          dbUser = await prisma.user.update({
+            where: { id: dbUser.id },
+            data: {
+              role,
+              name: name || dbUser.name || displayName,
+              email: normalized,
+              clerkId,
+            },
+          });
+        } catch {
+          // Email unique race — keep existing row
+        }
+      }
     }
 
-    // Existing clerkId match — keep profile fresh (never wipe SUSPENDED)
-    const role = resolveRole(normalized, dbUser.role);
-    if (
-      dbUser.role !== role ||
-      (name && dbUser.name !== displayName) ||
-      dbUser.email !== normalized
-    ) {
-      dbUser = await prisma.user.update({
-        where: { id: dbUser.id },
-        data: {
-          role,
-          name: name || dbUser.name || displayName,
-          email: normalized,
-        },
-      });
-    }
-
+    await ensureProfileAndSubscription(dbUser.id, dbUser.role);
     return toSession(dbUser, displayName, clerkId);
   });
 }
@@ -202,7 +229,6 @@ export async function getCurrentUser(): Promise<UserSession | null> {
       user?.primaryEmailAddress?.emailAddress ||
       user?.emailAddresses?.[0]?.emailAddress;
     if (!email) {
-      // Clerk session without email yet — treat as incomplete, not logged out
       void logError('Clerk user missing email', new Error('no email'), {
         category: 'AUTH',
         meta: { clerkId: clerkAuth.userId },
@@ -224,72 +250,98 @@ export async function getCurrentUser(): Promise<UserSession | null> {
   }
 }
 
-/**
- * Like getCurrentUser, but distinguishes "no Clerk session" vs DB down vs sync failed.
- */
-export async function resolveAppUser(): Promise<
+export type ResolveAppUserResult =
   | { status: 'anonymous' }
   | { status: 'ready'; user: UserSession }
   | { status: 'suspended'; user: UserSession }
-  | { status: 'sync_error'; clerkId: string }
-  | { status: 'db_unavailable'; clerkId: string }
-> {
+  | { status: 'sync_error'; clerkId: string; reason: string }
+  | { status: 'db_unavailable'; clerkId: string; reason: string };
+
+/**
+ * Like getCurrentUser, but distinguishes "no Clerk session" vs DB down vs sync failed.
+ */
+export async function resolveAppUser(): Promise<ResolveAppUserResult> {
   const clerkAuth = await auth();
   if (!clerkAuth?.userId) return { status: 'anonymous' };
 
-  const attemptSync = async () => {
+  const clerkId = clerkAuth.userId;
+
+  const attemptSync = async (): Promise<ResolveAppUserResult | { status: 'missing_email' }> => {
     const user = await currentUser();
+    if (!user) {
+      return {
+        status: 'sync_error',
+        clerkId,
+        reason: 'Clerk user payload was empty. Check CLERK_SECRET_KEY matches the publishable key.',
+      };
+    }
+
     const email =
-      user?.primaryEmailAddress?.emailAddress ||
-      user?.emailAddresses?.[0]?.emailAddress;
+      user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress;
 
     if (!email) {
-      return { status: 'missing_email' as const };
+      return { status: 'missing_email' };
     }
 
     const name =
-      `${user?.firstName || ''} ${user?.lastName || ''}`.trim() ||
-      user?.username ||
+      `${user.firstName || ''} ${user.lastName || ''}`.trim() ||
+      user.username ||
       undefined;
 
-    const session = await syncClerkUserToDb(clerkAuth.userId, email, name);
+    const session = await syncClerkUserToDb(clerkId, email, name);
     if (session.status === 'SUSPENDED') {
-      return { status: 'suspended' as const, user: session };
+      return { status: 'suspended', user: session };
     }
     void maybeRecordLogin(session.id);
-    return { status: 'ready' as const, user: session };
+    return { status: 'ready', user: session };
   };
 
   try {
     let result = await attemptSync();
 
-    // Right after OAuth/sign-up, email or DB write can lag once — retry briefly.
     if (result.status === 'missing_email') {
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 600));
       result = await attemptSync();
     }
 
     if (result.status === 'missing_email') {
-      return { status: 'sync_error', clerkId: clerkAuth.userId };
+      return {
+        status: 'sync_error',
+        clerkId,
+        reason: 'No email on the Clerk account yet. Add an email in Clerk, then retry.',
+      };
     }
 
     return result;
   } catch (err) {
-    void logError('resolveAppUser failed', err, { category: 'AUTH' });
-    // One retry for transient Neon / connection blips after signup
+    const reason = errorMessage(err);
+    void logError('resolveAppUser failed', err, { category: 'AUTH', meta: { clerkId, reason } });
+
     try {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 700));
       const retry = await attemptSync();
       if (retry.status === 'missing_email') {
-        return { status: 'sync_error', clerkId: clerkAuth.userId };
+        return {
+          status: 'sync_error',
+          clerkId,
+          reason: 'No email on the Clerk account yet. Add an email in Clerk, then retry.',
+        };
       }
       return retry;
     } catch (retryErr) {
-      void logError('resolveAppUser retry failed', retryErr, { category: 'AUTH' });
+      const retryReason = errorMessage(retryErr);
+      void logError('resolveAppUser retry failed', retryErr, {
+        category: 'AUTH',
+        meta: { clerkId, reason: retryReason },
+      });
       if (isDbConnectivityError(err) || isDbConnectivityError(retryErr)) {
-        return { status: 'db_unavailable', clerkId: clerkAuth.userId };
+        return {
+          status: 'db_unavailable',
+          clerkId,
+          reason: retryReason || reason,
+        };
       }
-      return { status: 'sync_error', clerkId: clerkAuth.userId };
+      return { status: 'sync_error', clerkId, reason: retryReason || reason };
     }
   }
 }

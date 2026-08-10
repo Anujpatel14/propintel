@@ -9,7 +9,10 @@ export async function GET() {
   }
 
   if (resolved.status === 'db_unavailable' || resolved.status === 'sync_error') {
-    return NextResponse.json({ authenticated: false, error: resolved.status }, { status: 503 });
+    return NextResponse.json(
+      { authenticated: false, error: resolved.status, reason: resolved.reason },
+      { status: 503 }
+    );
   }
 
   const { user } = resolved;
