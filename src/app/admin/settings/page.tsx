@@ -1,46 +1,52 @@
+import Link from 'next/link';
 import PageHeader from '@/components/dashboard/PageHeader';
+import { ADMIN_PANEL_PATH, adminHref } from '@/lib/adminPath';
+import { ShieldCheck, ScrollText, Users, Calendar } from 'lucide-react';
 
 export default function AdminSettingsPage() {
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="mx-auto max-w-3xl space-y-8">
       <PageHeader
         title="Platform settings"
-        description="API keys and maintenance mode. Values are read from environment in V1."
+        description="Admin console access and shortcuts. Investor-facing APIs stay in server env."
       />
 
-      <div className="mx-auto max-w-3xl surface-card space-y-4 p-6 text-sm">
-        {[
-          ['OpenRouter API key', 'OPENROUTER_API_KEY'],
-          ['OpenRouter model', 'OPENROUTER_MODEL (default openrouter/free)'],
-          ['OpenAI API key (optional)', 'OPENAI_API_KEY'],
-          ['Property API key', 'RENTCAST_API_KEY / ATTOM'],
-          ['Google Maps key', 'NEXT_PUBLIC_GOOGLE_MAPS_KEY'],
-          ['Google Meet client ID', 'GOOGLE_CLIENT_ID'],
-          ['Google Meet client secret', 'GOOGLE_CLIENT_SECRET'],
-          ['Google Meet refresh token', 'GOOGLE_REFRESH_TOKEN'],
-          ['Google Calendar ID', 'GOOGLE_CALENDAR_ID'],
-          ['Clerk publishable', 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY'],
-          ['Stripe secret', 'STRIPE_SECRET_KEY'],
-          ['Stripe webhook secret', 'STRIPE_WEBHOOK_SECRET'],
-        ].map(([label, env]) => (
-          <label key={env} className="block space-y-1">
-            <span className="text-[10px] font-bold uppercase text-[var(--muted)]">{label}</span>
-            <input
-              className="glass-input w-full px-3 py-2 text-xs opacity-70"
-              disabled
-              value={`Configured via .env → ${env}`}
-            />
-          </label>
-        ))}
-
-        <div className="flex items-center justify-between rounded-xl border border-[var(--border)] px-4 py-3">
-          <div>
-            <div className="font-bold">Maintenance mode</div>
-            <div className="text-xs text-[var(--muted)]">
-              When enabled, public traffic sees a maintenance page.
-            </div>
+      <div className="space-y-4 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-soft)]">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--sky)] text-[var(--cobalt)]">
+            <ShieldCheck className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="font-display text-lg font-bold text-[var(--ink)]">Admin entry</h2>
+            <p className="mt-1 break-all text-sm text-[var(--muted)]">
+              Sign-in URL:{' '}
+              <span className="font-mono font-semibold text-[var(--ink)]">{ADMIN_PANEL_PATH}</span>
+            </p>
+            <p className="mt-2 text-xs text-[var(--muted)]">
+              Username and password are configured on the server. Change them by updating your
+              deployment secrets, then restart the app.
+            </p>
           </div>
-          <input type="checkbox" disabled className="h-4 w-4" />
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-3">
+          {[
+            { href: adminHref('/admin/users'), label: 'Users', icon: Users },
+            { href: adminHref('/admin/coaching'), label: 'Coaching', icon: Calendar },
+            { href: adminHref('/admin/logs'), label: 'Audit logs', icon: ScrollText },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-3 text-sm font-semibold text-[var(--ink)] transition hover:border-[color-mix(in_srgb,var(--cobalt)_30%,transparent)]"
+              >
+                <Icon className="h-4 w-4 text-[var(--cobalt)]" />
+                {item.label}
+              </Link>
+            );
+          })}
         </div>
       </div>
     </div>

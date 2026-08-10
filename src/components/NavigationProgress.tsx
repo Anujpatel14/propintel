@@ -116,7 +116,7 @@ function NavigationProgressInner() {
       className="pointer-events-none fixed inset-x-0 top-0 z-[9999] h-[2.5px] overflow-hidden"
     >
       <div
-        className="h-full origin-left rounded-r-full bg-teal-700 shadow-[0_0_10px_rgba(15,118,110,0.55)] transition-[width] duration-200 ease-out"
+        className="h-full origin-left rounded-r-full bg-[#1d4ed8] shadow-[0_0_10px_rgba(29,78,216,0.45)] transition-[width] duration-200 ease-out"
         style={{ width: `${progress}%` }}
       />
     </div>

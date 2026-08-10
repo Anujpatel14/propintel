@@ -183,10 +183,36 @@ export async function savePropertyAnalysis(input: PropertyAnalysisInput) {
     },
   });
 
+  // Push / refresh CRM pipeline so Deals + CRM stay in sync for investors
+  try {
+    const { upsertCrmDealForAddress, revalidateDealPaths } = await import(
+      '@/lib/services/dealPipelineSync'
+    );
+    await upsertCrmDealForAddress({
+      userId: user.id,
+      address: data.address,
+      stage: 'UNDER_REVIEW',
+      offerAmount: data.purchasePrice,
+      notes: `${strategyType.toUpperCase()} analysis saved`,
+      analysisId: analysis.id,
+      analysisType: 'PROPERTY',
+    });
+    if (!updated || !analysis.pipelineStatus) {
+      await prisma.propertyAnalysis.update({
+        where: { id: analysis.id },
+        data: { pipelineStatus: 'UNDER_REVIEW' },
+      });
+    }
+    revalidateDealPaths();
+  } catch (e) {
+    console.error('CRM sync after analysis save failed', e);
+  }
+
   revalidatePath('/dashboard/analyze');
   revalidatePath('/dashboard/deals');
   revalidatePath('/dashboard/portfolio');
   revalidatePath('/dashboard/reports');
+  revalidatePath('/dashboard/crm');
   return { success: true as const, analysis, updated };
 }
 
@@ -275,9 +301,35 @@ export async function saveFlipAnalysis(input: {
     },
   });
 
+  try {
+    const { upsertCrmDealForAddress, revalidateDealPaths } = await import(
+      '@/lib/services/dealPipelineSync'
+    );
+    await upsertCrmDealForAddress({
+      userId: user.id,
+      address: data.address,
+      stage: 'UNDER_REVIEW',
+      offerAmount: data.mao ?? data.purchasePrice,
+      assignmentFee: data.profit && data.profit > 0 ? Math.round(data.profit * 0.3) : 0,
+      notes: 'Flip analysis saved',
+      analysisId: flip.id,
+      analysisType: 'FLIP',
+    });
+    if (!updated || !flip.pipelineStatus) {
+      await prisma.flipAnalysis.update({
+        where: { id: flip.id },
+        data: { pipelineStatus: 'UNDER_REVIEW' },
+      });
+    }
+    revalidateDealPaths();
+  } catch (e) {
+    console.error('CRM sync after flip save failed', e);
+  }
+
   revalidatePath('/dashboard/analyze');
   revalidatePath('/dashboard/deals');
   revalidatePath('/dashboard/portfolio');
+  revalidatePath('/dashboard/crm');
   return { success: true as const, flip, updated };
 }
 
@@ -421,6 +473,25 @@ export async function getAnalysisById(id: string) {
   return { success: false as const, error: 'Deal not found' };
 }
 
+function monthKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(key: string) {
+  const [y, m] = key.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'short' });
+}
+
+function lastNMonthKeys(n: number) {
+  const keys: string[] = [];
+  const now = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(monthKey(d));
+  }
+  return keys;
+}
+
 export async function getPortfolioSummaryAction() {
   const user = await requireAuth();
   const [properties, holds, flips] = await Promise.all([
@@ -447,16 +518,113 @@ export async function getPortfolioSummaryAction() {
   const totalPropertyValue = properties.reduce((s, p) => s + (p.estimatedValue || 0), 0);
   const totalDealPurchase = [...holds, ...flips].reduce((s, d) => s + (d.purchasePrice || 0), 0);
   const monthlyCashFlow = holds.reduce((s, d) => s + (d.cashFlow || 0), 0);
+  const totalFlipProfit = flips.reduce((s, d) => s + (d.profit || 0), 0);
   const avgCap =
     holds.length > 0
       ? holds.reduce((s, d) => s + (d.capRate || 0), 0) / holds.length
       : 0;
+
+  const recentDeals = [...holds, ...flips]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 8);
+
+  const months = lastNMonthKeys(12);
+  const purchaseMap = Object.fromEntries(months.map((k) => [k, 0]));
+  const salesMap = Object.fromEntries(months.map((k) => [k, 0]));
+  const earningsMap = Object.fromEntries(months.map((k) => [k, 0]));
+  const valueEvents: { key: string; value: number }[] = [];
+
+  for (const p of properties) {
+    const key = monthKey(new Date(p.createdAt));
+    valueEvents.push({ key, value: p.estimatedValue || 0 });
+  }
+
+  for (const h of holds) {
+    const key = monthKey(new Date(h.createdAt));
+    if (key in purchaseMap) {
+      purchaseMap[key] += h.purchasePrice || 0;
+      // Hold "earnings" proxy: annualized cash flow credited in the deal month
+      earningsMap[key] += (h.cashFlow || 0) * 12;
+    }
+  }
+
+  for (const f of flips) {
+    const key = monthKey(new Date(f.createdAt));
+    if (key in purchaseMap) {
+      purchaseMap[key] += f.purchasePrice || 0;
+      // Flip "sale" / exit: ARV as exit value, profit as earnings
+      salesMap[key] += f.arv || 0;
+      earningsMap[key] += f.profit || 0;
+    }
+  }
+
+  // Cumulative portfolio value over the last 12 months (assets booked by createdAt)
+  let running = 0;
+  const valueByMonthKey: Record<string, number> = {};
+  const sortedEvents = [...valueEvents].sort((a, b) => a.key.localeCompare(b.key));
+  const firstMonth = months[0];
+  for (const e of sortedEvents) {
+    if (e.key < firstMonth) running += e.value;
+  }
+  for (const key of months) {
+    for (const e of sortedEvents) {
+      if (e.key === key) running += e.value;
+    }
+    valueByMonthKey[key] = running;
+  }
+
+  const valueSeries = months.map((k) => ({
+    label: monthLabel(k),
+    value: Math.round(valueByMonthKey[k] || 0),
+  }));
+
+  const purchasesSeries = months.map((k) => ({
+    label: monthLabel(k),
+    value: Math.round(purchaseMap[k] || 0),
+  }));
+
+  const salesSeries = months.map((k) => ({
+    label: monthLabel(k),
+    value: Math.round(salesMap[k] || 0),
+  }));
+
+  const earningsSeries = months.map((k) => {
+    const v = Math.round(earningsMap[k] || 0);
+    return { label: monthLabel(k), value: v, tone: (v >= 0 ? 'up' : 'down') as 'up' | 'down' };
+  });
+
+  const growthSeries = months.map((k, i) => {
+    const cur = valueByMonthKey[k] || 0;
+    const prev = i === 0 ? cur : valueByMonthKey[months[i - 1]] || 0;
+    const delta = Math.round(cur - prev);
+    return { label: monthLabel(k), value: delta, tone: (delta >= 0 ? 'up' : 'down') as 'up' | 'down' };
+  });
+
+  const yearAgoValue = valueByMonthKey[months[0]] || 0;
+  const nowValue = valueByMonthKey[months[months.length - 1]] || totalPropertyValue;
+  const lastYearGrowth =
+    yearAgoValue > 0 ? ((nowValue - yearAgoValue) / yearAgoValue) * 100 : nowValue > 0 ? 100 : 0;
+  const lastYearEarnings = months.reduce((s, k) => s + (earningsMap[k] || 0), 0);
+
+  const cityCounts = new Map<string, number>();
+  for (const p of properties) {
+    const label = [p.city, p.state].filter(Boolean).join(', ') || 'Unknown';
+    cityCounts.set(label, (cityCounts.get(label) || 0) + (p.estimatedValue || 1));
+  }
+  const COLORS = ['#1d4ed8', '#3b82f6', '#60a5fa', '#93c5fd', '#0ea5e9', '#059669'];
+  const allocation = [...cityCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([label, value], i) => ({ label, value: Math.round(value), color: COLORS[i % COLORS.length] }));
+
+  const sparkFrom = (series: { value: number }[]) => series.map((s) => s.value);
 
   return {
     success: true as const,
     properties,
     holds,
     flips,
+    recentDeals,
     kpis: {
       propertyCount: properties.length,
       dealCount: holds.length + flips.length,
@@ -464,6 +632,65 @@ export async function getPortfolioSummaryAction() {
       totalDealPurchase,
       monthlyCashFlow,
       avgCapRate: avgCap,
+      lastYearGrowthPct: Math.round(lastYearGrowth * 10) / 10,
+      lastYearEarnings: Math.round(lastYearEarnings),
+      totalFlipProfit: Math.round(totalFlipProfit),
+    },
+    charts: {
+      valueSeries,
+      purchasesSeries,
+      salesSeries,
+      earningsSeries,
+      growthSeries,
+      allocation,
+      sparks: {
+        value: sparkFrom(valueSeries),
+        purchases: sparkFrom(purchasesSeries),
+        earnings: sparkFrom(earningsSeries),
+        growth: sparkFrom(growthSeries),
+      },
     },
   };
+}
+
+export async function updateAnalysisPipelineStatus(
+  id: string,
+  type: 'PROPERTY' | 'FLIP',
+  status: string
+) {
+  const user = await requireAuth();
+  const {
+    isPipelineStatus,
+    syncCrmStageByAddress,
+    revalidateDealPaths,
+  } = await import('@/lib/services/dealPipelineSync');
+
+  if (!isPipelineStatus(status)) {
+    return { success: false as const, error: 'Invalid status' };
+  }
+
+  if (type === 'PROPERTY') {
+    const row = await prisma.propertyAnalysis.findFirst({
+      where: { id, userId: user.id },
+    });
+    if (!row) return { success: false as const, error: 'Deal not found' };
+    await prisma.propertyAnalysis.update({
+      where: { id },
+      data: { pipelineStatus: status },
+    });
+    await syncCrmStageByAddress(user.id, row.address, status);
+  } else {
+    const row = await prisma.flipAnalysis.findFirst({
+      where: { id, userId: user.id },
+    });
+    if (!row) return { success: false as const, error: 'Deal not found' };
+    await prisma.flipAnalysis.update({
+      where: { id },
+      data: { pipelineStatus: status },
+    });
+    await syncCrmStageByAddress(user.id, row.address, status);
+  }
+
+  revalidateDealPaths();
+  return { success: true as const };
 }

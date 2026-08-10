@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { resolveAppUser } from '@/lib/services/auth';
 import { getUserSubscription } from '@/lib/services/stripe';
 import DashboardShell from '@/components/dashboard/DashboardShell';
+import DatabaseUnavailable from '@/components/DatabaseUnavailable';
 
 export const metadata: Metadata = {
   title: 'Overview',
@@ -20,9 +21,17 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     redirect('/login?redirect=/dashboard');
   }
 
+  if (resolved.status === 'db_unavailable') {
+    return <DatabaseUnavailable />;
+  }
+
   if (resolved.status === 'sync_error') {
     // Break login↔dashboard loop: force a clean sign-in
     redirect('/login?error=session');
+  }
+
+  if (resolved.status === 'suspended') {
+    redirect('/login?error=suspended');
   }
 
   const user = resolved.user;

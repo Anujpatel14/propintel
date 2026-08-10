@@ -10,6 +10,7 @@ const MESSAGES = [
   { role: 'ai' as const, text: 'Verdict: Strong buy — healthy equity cushion.' },
 ];
 
+/** Animated AI underwriting preview — used in platform / insights sections. */
 export default function FloatingDealCard() {
   const [visible, setVisible] = useState(0);
 
@@ -27,17 +28,18 @@ export default function FloatingDealCard() {
 
   return (
     <motion.div
-      className="glass-float animate-float relative w-full max-w-[340px] rounded-[1.75rem] p-5"
-      initial={{ opacity: 0, y: 40, rotate: 2 }}
-      animate={{ opacity: 1, y: 0, rotate: 0 }}
-      transition={{ duration: 0.9, delay: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      className="landing-glass relative w-full max-w-[360px] rounded-[1.5rem] p-5"
+      initial={{ opacity: 0, y: 28 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
     >
       <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-[11px] font-semibold tracking-wide text-[#3d5a4c]">
-          <span className="animate-pulse-dot inline-block h-2 w-2 rounded-full bg-[#3d5a4c]" />
+        <div className="flex items-center gap-2 text-[11px] font-semibold tracking-wide text-[#1d4ed8]">
+          <span className="animate-pulse-dot inline-block h-2 w-2 rounded-full bg-[#1d4ed8]" />
           LIVE ANALYSIS
         </div>
-        <span className="text-[10px] font-medium tracking-wider text-[#5f6d64]/80">LISTENING…</span>
+        <span className="text-[10px] font-medium tracking-wider text-[#5b6578]">AI ENGINE</span>
       </div>
 
       <div className="flex min-h-[220px] flex-col gap-2.5">
@@ -52,8 +54,8 @@ export default function FloatingDealCard() {
               transition={{ duration: 0.35 }}
               className={`max-w-[92%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-snug ${
                 msg.role === 'ai'
-                  ? 'self-start bg-[#3d5a4c] text-[#f4f7f4]'
-                  : 'self-end bg-white/90 text-[#171c19] shadow-sm'
+                  ? 'self-start bg-[#0b1220] text-[#f8fafc]'
+                  : 'self-end bg-white text-[#0b1220] shadow-sm'
               }`}
             >
               {msg.text}
@@ -62,16 +64,16 @@ export default function FloatingDealCard() {
         </AnimatePresence>
       </div>
 
-      <div className="mt-4 flex items-center gap-2 rounded-2xl border border-white/40 bg-white/40 px-3 py-2.5">
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/50">
+      <div className="mt-4 flex items-center gap-2 rounded-xl border border-[rgba(11,18,32,0.08)] bg-white/60 px-3 py-2.5">
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#dbe7ff]">
           <motion.div
-            className="h-full rounded-full bg-[#3d5a4c]"
+            className="h-full rounded-full bg-[#1d4ed8]"
             initial={{ width: '8%' }}
             animate={{ width: visible >= MESSAGES.length ? '100%' : `${18 + visible * 22}%` }}
             transition={{ duration: 0.5 }}
           />
         </div>
-        <span className="text-[10px] font-semibold text-[#3d5a4c]">AI</span>
+        <span className="text-[10px] font-semibold text-[#1d4ed8]">AI</span>
       </div>
     </motion.div>
   );

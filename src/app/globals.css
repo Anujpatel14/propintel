@@ -1,24 +1,83 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f6f3;
-  --foreground: #141a17;
-  --muted: #5f6d64;
-  --muted-foreground: #849188;
+  --background: #f3f6fb;
+  --foreground: #0b1220;
+  --muted: #5b6578;
+  --muted-foreground: #94a3b8;
   --surface: #ffffff;
-  --surface-soft: #eef2ee;
-  --sage: #7f9a88;
-  --sage-deep: #3d5a4c;
-  --ink: #171c19;
-  --primary: 61 90 76;
-  --primary-foreground: #f7faf7;
-  --accent: 214 168 140;
-  --border: rgba(20, 26, 23, 0.08);
-  --border-strong: rgba(20, 26, 23, 0.14);
-  --ring: rgba(61, 90, 76, 0.28);
-  --sidebar: #fbfcfb;
-  --shadow-soft: 0 20px 50px -28px rgba(20, 26, 23, 0.22);
-  --shadow-lift: 0 30px 80px -40px rgba(20, 26, 23, 0.35);
+  --surface-soft: #e8eef8;
+  --sage: #64748b;
+  --sage-deep: #1d4ed8;
+  --ink: #0b1220;
+  --primary: 29 78 216;
+  --primary-foreground: #f8fafc;
+  --accent: 147 197 253;
+  --border: rgba(11, 18, 32, 0.08);
+  --border-strong: rgba(11, 18, 32, 0.14);
+  --ring: rgba(29, 78, 216, 0.28);
+  --sidebar: #ffffff;
+  --shadow-soft: 0 16px 40px -28px rgba(11, 18, 32, 0.22);
+  --shadow-lift: 0 28px 70px -40px rgba(11, 18, 32, 0.28);
+  --cobalt: #1d4ed8;
+  --cobalt-deep: #1639a8;
+  --sky: #dbe7ff;
+  --sky-fg: #1639a8;
+  --panel-grad-top: #f8fafc;
+  --panel-grad-bottom: #ffffff;
+  --danger-soft: #fef2f2;
+  --danger-border: #fecaca;
+  --danger-fg: #b91c1c;
+  --success-soft: #ecfdf5;
+  --success-fg: #047857;
+  --amber-soft: #fffbeb;
+  --amber-border: #fde68a;
+  --amber-fg: #92400e;
+  --hero-from: #0b1220;
+  --hero-via: #1639a8;
+  --hero-to: #1d4ed8;
+}
+
+html.dark {
+  color-scheme: dark;
+  /* Black / charcoal surfaces */
+  --background: #000000;
+  --foreground: #f2f4f8;
+  --muted: #a1a8b3;
+  --muted-foreground: #7c8494;
+  --surface: #111111;
+  --surface-soft: #1a1a1a;
+  --sage: #94a3b8;
+  --sage-deep: #60a5fa;
+  --ink: #f5f7fb;
+  /* Keep brand cobalt for accents, CTAs, charts — not for page backgrounds */
+  --primary: 59 130 246;
+  --primary-foreground: #f8fafc;
+  --accent: 96 165 250;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --ring: rgba(59, 130, 246, 0.4);
+  --sidebar: #0a0a0a;
+  --shadow-soft: 0 16px 40px -24px rgba(0, 0, 0, 0.8);
+  --shadow-lift: 0 28px 70px -36px rgba(0, 0, 0, 0.85);
+  --cobalt: #3b82f6;
+  --cobalt-deep: #60a5fa;
+  --sky: rgba(59, 130, 246, 0.16);
+  --sky-fg: #93c5fd;
+  --panel-grad-top: #161616;
+  --panel-grad-bottom: #111111;
+  --danger-soft: rgba(244, 63, 94, 0.14);
+  --danger-border: rgba(251, 113, 133, 0.35);
+  --danger-fg: #fda4af;
+  --success-soft: rgba(16, 185, 129, 0.14);
+  --success-fg: #6ee7b7;
+  --amber-soft: rgba(245, 158, 11, 0.14);
+  --amber-border: rgba(251, 191, 36, 0.35);
+  --amber-fg: #fcd34d;
+  /* Dark heroes stay near-black with a cobalt finish */
+  --hero-from: #000000;
+  --hero-via: #0b1220;
+  --hero-to: #1d4ed8;
 }
 
 @theme inline {
@@ -37,7 +96,126 @@
   --color-sidebar: var(--sidebar);
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-serif), ui-serif, Georgia, serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* Landing page — cobalt / ice system (scoped; dashboard keeps sage tokens) */
+.landing {
+  --lp-bg: #f3f6fb;
+  --lp-ink: #0b1220;
+  --lp-muted: #5b6578;
+  --lp-cobalt: #1d4ed8;
+  --lp-cobalt-deep: #1639a8;
+  --lp-sky: #dbe7ff;
+  --lp-surface: #ffffff;
+  --lp-border: rgba(11, 18, 32, 0.08);
+  --lp-shadow: 0 24px 60px -32px rgba(11, 18, 32, 0.28);
+  background: var(--lp-bg);
+  color: var(--lp-ink);
+  overflow-x: hidden;
+}
+
+/* Prevent common mobile overflow from wide children */
+.landing img,
+.landing svg,
+.landing video {
+  max-width: 100%;
+}
+
+.landing-glass {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 14px 36px -22px rgba(11, 18, 32, 0.32);
+}
+
+.landing-glass-dark {
+  background: rgba(11, 18, 32, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .landing-glass {
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .landing-glass-dark {
+    background: rgba(11, 18, 32, 0.45);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+}
+
+.btn-cobalt {
+  background: var(--lp-cobalt);
+  color: #fff;
+  font-weight: 650;
+  border-radius: 0.9rem;
+  transition: background 0.2s ease;
+}
+
+.btn-cobalt:hover {
+  background: var(--lp-cobalt-deep);
+}
+
+.btn-ink-lp {
+  background: var(--lp-ink);
+  color: #f8fafc;
+  font-weight: 650;
+  border-radius: 0.9rem;
+  transition: background 0.2s ease;
+}
+
+.btn-ink-lp:hover {
+  background: #1a2438;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes hero-widget-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-widget {
+  animation: hero-widget-in 0.45s ease-out both;
+}
+.hero-widget-delay-1 {
+  animation-delay: 0.12s;
+}
+.hero-widget-delay-2 {
+  animation-delay: 0.22s;
+}
+
+.lift-card {
+  transition: transform 0.2s ease;
+}
+.lift-card:hover {
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-widget,
+  .hero-widget-delay-1,
+  .hero-widget-delay-2 {
+    animation: none;
+  }
+  .lift-card:hover {
+    transform: none;
+  }
 }
 
 body {
@@ -74,7 +252,21 @@ input[type="reset"]:disabled {
 
 .font-display {
   font-family: var(--font-display);
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
+}
+
+.font-serif {
+  font-family: var(--font-serif);
+  letter-spacing: -0.01em;
+}
+
+.landing-hero-title {
+  text-shadow: 0 2px 20px rgba(8, 12, 24, 0.55);
+}
+
+.landing-hero-accent {
+  color: #9ec5ff;
+  text-shadow: 0 2px 22px rgba(8, 12, 24, 0.6);
 }
 
 .glass-nav {
@@ -114,7 +306,7 @@ input[type="reset"]:disabled {
 }
 
 .glass-input {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: 0.85rem;
   color: var(--foreground);
@@ -128,8 +320,8 @@ input[type="reset"]:disabled {
 }
 
 .btn-ink {
-  background: var(--ink);
-  color: #f7faf7;
+  background: #0b1220;
+  color: #f8fafc;
   font-weight: 650;
   border-radius: 0.75rem;
   cursor: pointer;
@@ -137,13 +329,13 @@ input[type="reset"]:disabled {
 }
 
 .btn-ink:hover {
-  background: #2a332e;
+  background: #1a2438;
   transform: translateY(-1px);
 }
 
 .btn-primary {
-  background: #0f766e;
-  color: #f7faf7;
+  background: #1d4ed8;
+  color: #f8fafc;
   font-weight: 650;
   border-radius: 0.75rem;
   cursor: pointer;
@@ -151,7 +343,7 @@ input[type="reset"]:disabled {
 }
 
 .btn-primary:hover {
-  background: #0d665f;
+  background: #1639a8;
   transform: translateY(-1px);
 }
 
@@ -241,18 +433,18 @@ input[type="reset"]:disabled {
 }
 
 .skeleton-shimmer {
-  background-color: #e4ebe6;
+  background-color: var(--surface-soft);
   background-image: linear-gradient(
     90deg,
-    #e4ebe6 0%,
-    #f7faf7 35%,
-    #d5dfd8 50%,
-    #f7faf7 65%,
-    #e4ebe6 100%
+    var(--surface-soft) 0%,
+    var(--surface) 35%,
+    color-mix(in srgb, var(--muted) 25%, var(--surface-soft)) 50%,
+    var(--surface) 65%,
+    var(--surface-soft) 100%
   );
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.35s ease-in-out infinite;
-  box-shadow: inset 0 0 0 1px rgba(20, 26, 23, 0.04);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 
 ::-webkit-scrollbar {
@@ -265,21 +457,283 @@ input[type="reset"]:disabled {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c4cec6;
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9aada0;
+  background: color-mix(in srgb, var(--muted) 70%, transparent);
 }
 
 ::selection {
-  background: rgba(127, 154, 136, 0.28);
-  color: #141a17;
+  background: rgba(29, 78, 216, 0.28);
+  color: var(--foreground);
+}
+
+html.dark ::selection {
+  background: rgba(59, 130, 246, 0.4);
+  color: #f8fafc;
 }
 
 /* ---------------------------------------------------------------------------
- * Clerk UI — keep components aligned with PropIntel surface / teal theme
+ * Investor portal dark-mode remaps for hard-coded light colors
+ * Surfaces go charcoal; accents keep cobalt blue.
+ * --------------------------------------------------------------------------- */
+
+/* Solid white panels → surface (never force translucent white/10 links) */
+html.dark .dashboard :is(div, section, aside, article, form, header, main, li, ul, table, tr, td, th).bg-white {
+  background-color: var(--surface) !important;
+}
+
+html.dark .dashboard :is(div, section, aside, article, form, header).bg-white\/90,
+html.dark .dashboard :is(div, section, aside, article, form, header).bg-white\/80,
+html.dark .dashboard :is(div, section, aside, article, form, header).bg-white\/60 {
+  background-color: color-mix(in srgb, var(--surface) 92%, transparent) !important;
+}
+
+/* Solid white CTAs only — exclude opacity variants like bg-white/10 on dark heroes */
+html.dark .dashboard button.bg-white:not([class*='bg-white/']),
+html.dark .dashboard a.bg-white:not([class*='bg-white/']) {
+  background-color: #ffffff !important;
+  color: #0b1220 !important;
+}
+
+html.dark .dashboard button.bg-white:not([class*='bg-white/']):hover,
+html.dark .dashboard a.bg-white:not([class*='bg-white/']):hover {
+  background-color: #e8eef8 !important;
+}
+
+/* Soft ice / slate fills */
+html.dark .dashboard .bg-\[\#f3f6fb\],
+html.dark .dashboard .bg-\[\#f8fafc\],
+html.dark .dashboard .bg-\[\#eff4ff\],
+html.dark .dashboard .bg-\[\#e8eef8\],
+html.dark .dashboard .bg-\[\#e8eef8\]\/55,
+html.dark .dashboard .bg-slate-50,
+html.dark .dashboard .bg-slate-100,
+html.dark .dashboard .bg-gray-50,
+html.dark .dashboard .bg-zinc-50,
+html.dark .dashboard .bg-blue-50,
+html.dark .dashboard .bg-blue-50\/80,
+html.dark .dashboard .bg-blue-100,
+html.dark .dashboard .bg-indigo-50,
+html.dark .dashboard .bg-sky-50 {
+  background-color: var(--surface-soft) !important;
+}
+
+html.dark .dashboard .bg-\[\#dbe7ff\] {
+  background-color: var(--sky) !important;
+}
+
+/* Hover soft fills — critical for activity rows / filters */
+html.dark .dashboard .hover\:bg-\[\#f3f6fb\]:hover,
+html.dark .dashboard .hover\:bg-\[\#f8fafc\]:hover,
+html.dark .dashboard .hover\:bg-\[\#eff4ff\]:hover,
+html.dark .dashboard .hover\:bg-\[\#e8eef8\]:hover,
+html.dark .dashboard .hover\:bg-white:hover,
+html.dark .dashboard .hover\:bg-slate-50:hover,
+html.dark .dashboard .hover\:bg-slate-100:hover,
+html.dark .dashboard .hover\:bg-blue-50:hover {
+  background-color: var(--surface-soft) !important;
+  color: var(--foreground);
+}
+
+/* Translucent white on dark heroes must stay translucent (never solid white) */
+html.dark .dashboard [class*='bg-white/']:not(.bg-white),
+html.dark .dashboard [class*='hover:bg-white/']:hover {
+  color: #ffffff;
+}
+
+html.dark .dashboard .text-\[\#0b1220\],
+html.dark .dashboard .text-\[\#171c19\],
+html.dark .dashboard .text-slate-900,
+html.dark .dashboard .text-gray-900,
+html.dark .dashboard .text-zinc-900 {
+  color: var(--foreground) !important;
+}
+
+html.dark .dashboard button.bg-white:not([class*='bg-white/']) .text-\[\#0b1220\],
+html.dark .dashboard a.bg-white:not([class*='bg-white/']) .text-\[\#0b1220\],
+html.dark .dashboard button.bg-white:not([class*='bg-white/']).text-\[\#0b1220\],
+html.dark .dashboard a.bg-white:not([class*='bg-white/']).text-\[\#0b1220\] {
+  color: #0b1220 !important;
+}
+
+/* Cobalt text stays blue (brighter in dark) */
+html.dark .dashboard .text-\[\#1639a8\],
+html.dark .dashboard .text-\[\#1d4ed8\],
+html.dark .dashboard .text-blue-900,
+html.dark .dashboard .text-blue-800,
+html.dark .dashboard .text-blue-700 {
+  color: var(--sky-fg) !important;
+}
+
+html.dark .dashboard .border-\[\#1d4ed8\]\/15,
+html.dark .dashboard .border-blue-700\/20,
+html.dark .dashboard .border-blue-700\/25,
+html.dark .dashboard .border-blue-700\/30,
+html.dark .dashboard .border-blue-800\/30 {
+  border-color: rgba(59, 130, 246, 0.35) !important;
+}
+
+html.dark .dashboard .border-slate-200,
+html.dark .dashboard .border-gray-200,
+html.dark .dashboard .border-zinc-200 {
+  border-color: var(--border-strong) !important;
+}
+
+/* Soft cobalt washes */
+html.dark .dashboard .bg-\[\#1d4ed8\]\/5,
+html.dark .dashboard .bg-\[\#1d4ed8\]\/6,
+html.dark .dashboard .bg-\[\#1d4ed8\]\/8,
+html.dark .dashboard .bg-\[\#1d4ed8\]\/10,
+html.dark .dashboard .bg-blue-800\/10,
+html.dark .dashboard .bg-blue-700\/5,
+html.dark .dashboard .bg-blue-700\/10 {
+  background-color: rgba(59, 130, 246, 0.16) !important;
+}
+
+html.dark .dashboard .bg-rose-50,
+html.dark .dashboard .hover\:bg-rose-50:hover {
+  background-color: var(--danger-soft) !important;
+}
+
+html.dark .dashboard .text-rose-700,
+html.dark .dashboard .text-rose-600 {
+  color: var(--danger-fg) !important;
+}
+
+/* Soft cobalt icon chips */
+html.dark .dashboard .bg-\[\#eff4ff\] {
+  background-color: var(--sky) !important;
+}
+
+html.dark .dashboard .hover\:bg-\[\#eff4ff\]:hover {
+  background-color: var(--sky) !important;
+}
+
+html.dark .dashboard .border-red-200 {
+  border-color: var(--danger-border) !important;
+}
+
+html.dark .dashboard .text-red-700 {
+  color: var(--danger-fg) !important;
+}
+
+html.dark .dashboard .bg-emerald-50 {
+  background-color: var(--success-soft) !important;
+}
+
+html.dark .dashboard .text-emerald-700,
+html.dark .dashboard .text-emerald-600,
+html.dark .dashboard .text-emerald-800 {
+  color: var(--success-fg) !important;
+}
+
+html.dark .dashboard .border-emerald-200 {
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+html.dark .dashboard .bg-amber-50 {
+  background-color: var(--amber-soft) !important;
+}
+
+html.dark .dashboard .border-amber-200 {
+  border-color: var(--amber-border) !important;
+}
+
+html.dark .dashboard .text-amber-800,
+html.dark .dashboard .text-amber-900,
+html.dark .dashboard .text-amber-950 {
+  color: var(--amber-fg) !important;
+}
+
+html.dark .dashboard .text-slate-600,
+html.dark .dashboard .text-slate-500,
+html.dark .dashboard .text-gray-600,
+html.dark .dashboard .text-gray-500 {
+  color: var(--muted) !important;
+}
+
+/* Near-black utility stays black in dark mode */
+html.dark .dashboard .bg-\[\#0b1220\] {
+  background-color: #000000 !important;
+}
+
+/* Solid cobalt fills keep brand blue */
+html.dark .dashboard .bg-\[\#1d4ed8\],
+html.dark .dashboard .bg-\[\#1639a8\],
+html.dark .dashboard .bg-blue-700,
+html.dark .dashboard .bg-blue-800 {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+html.dark .dashboard .hover\:bg-\[\#1e40af\]:hover,
+html.dark .dashboard .hover\:bg-\[\#1639a8\]:hover {
+  background-color: #1d4ed8 !important;
+}
+
+html.dark .dashboard .shadow-\[0_1px_0_rgba\(15\,23\,42\,0\.04\)\] {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+html.dark .dashboard .bg-\[linear-gradient\(180deg\,\#f8fafc\,white\)\],
+html.dark .dashboard .bg-\[linear-gradient\(180deg\,\#f8fafc\,\#fff\)\],
+html.dark .dashboard .bg-gradient-to-r.from-\[\#f3f6fb\] {
+  background-image: linear-gradient(180deg, var(--panel-grad-top), var(--panel-grad-bottom)) !important;
+  background-color: transparent !important;
+}
+
+html.dark .dashboard .divide-\[var\(--border\)\] > * + *,
+html.dark .dashboard .divide-slate-200 > * + * {
+  border-color: var(--border) !important;
+}
+
+html.dark .clerk-user-profile .cl-navbarButton[data-active='true'],
+html.dark .clerk-user-profile .cl-navbarButton[aria-current='page'],
+html.dark .clerk-user-profile .cl-scrollBox {
+  background: var(--surface) !important;
+  color: var(--foreground) !important;
+  box-shadow: none !important;
+}
+
+html.dark .cl-badge {
+  background: rgba(59, 130, 246, 0.18) !important;
+  color: #93c5fd !important;
+}
+
+html.dark .dashboard input,
+html.dark .dashboard textarea,
+html.dark .dashboard select {
+  color-scheme: dark;
+  background-color: var(--surface-soft);
+  color: var(--foreground);
+  border-color: var(--border-strong);
+}
+
+html.dark .glass-input,
+html.dark .dashboard .glass-input {
+  background: var(--surface-soft);
+  border-color: var(--border-strong);
+  color: var(--foreground);
+}
+
+html.dark .glass-card,
+html.dark .surface-card {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+html.dark .clerk-user-profile .cl-scrollBox,
+html.dark .clerk-user-profile .cl-navbarButton[data-active='true'],
+html.dark .clerk-user-profile .cl-navbarButton[aria-current='page'] {
+  background: var(--surface) !important;
+  color: var(--foreground) !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * Clerk UI — keep components aligned with PropIntel surface / cobalt theme
  * --------------------------------------------------------------------------- */
 .clerk-user-profile .cl-rootBox,
 .clerk-user-profile .cl-cardBox {
@@ -297,9 +751,9 @@ input[type="reset"]:disabled {
 .clerk-user-profile .cl-navbarButton[data-active='true'],
 .clerk-user-profile .cl-navbarButton[aria-current='page'] {
   background: #fff !important;
-  color: #134e4a !important;
+  color: #0b1220 !important;
   font-weight: 700 !important;
-  box-shadow: 0 1px 2px rgba(20, 26, 23, 0.06) !important;
+  box-shadow: 0 1px 2px rgba(11, 18, 32, 0.06) !important;
 }
 
 .clerk-user-profile .cl-scrollBox {
@@ -317,7 +771,7 @@ input[type="reset"]:disabled {
 
 .cl-formButtonPrimary,
 .cl-button[data-variant='solid'] {
-  background-color: #0f766e !important;
+  background-color: #1d4ed8 !important;
   border-radius: 0.75rem !important;
   text-transform: none !important;
   box-shadow: none !important;
@@ -325,31 +779,31 @@ input[type="reset"]:disabled {
 
 .cl-formButtonPrimary:hover,
 .cl-button[data-variant='solid']:hover {
-  background-color: #0d665f !important;
+  background-color: #1639a8 !important;
 }
 
 .cl-formFieldInput:focus,
 .cl-input:focus {
-  border-color: #0f766e !important;
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.2) !important;
+  border-color: #1d4ed8 !important;
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.2) !important;
 }
 
 .cl-footerActionLink,
 .cl-formButtonReset,
 .cl-identityPreviewEditButton,
 .cl-profileSectionPrimaryButton {
-  color: #115e59 !important;
+  color: #1d4ed8 !important;
 }
 
 .cl-badge {
-  background: rgba(15, 118, 110, 0.1) !important;
-  color: #115e59 !important;
+  background: rgba(29, 78, 216, 0.1) !important;
+  color: #1639a8 !important;
   border-radius: 0.375rem !important;
 }
 
 .cl-internal-b3fm6y,
 .cl-modalBackdrop {
-  background: rgba(20, 26, 23, 0.4) !important;
+  background: rgba(11, 18, 32, 0.4) !important;
 }
 
 .cl-modalContent {

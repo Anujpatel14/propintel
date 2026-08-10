@@ -14,7 +14,8 @@ function createPrismaClient() {
 function hasExpandedModels(client: PrismaClient): boolean {
   return (
     typeof (client as { userSettings?: unknown }).userSettings !== 'undefined' &&
-    typeof (client as { paymentEvent?: unknown }).paymentEvent !== 'undefined'
+    typeof (client as { paymentEvent?: unknown }).paymentEvent !== 'undefined' &&
+    typeof (client as { coachingExpert?: unknown }).coachingExpert !== 'undefined'
   );
 }
 
@@ -53,6 +54,32 @@ export const prisma = new Proxy({} as PrismaClient, {
     return typeof value === 'function' ? value.bind(client) : value;
   },
 });
+
+type CoachingExpertDelegate = {
+  findMany: (...args: never[]) => Promise<unknown>;
+  findUnique: (...args: never[]) => Promise<unknown>;
+  findFirst: (...args: never[]) => Promise<unknown>;
+  create: (...args: never[]) => Promise<unknown>;
+  update: (...args: never[]) => Promise<unknown>;
+  delete: (...args: never[]) => Promise<unknown>;
+  count: (...args: never[]) => Promise<number>;
+};
+
+/** Safe access — returns null when Prisma client was not regenerated after CoachingExpert was added. */
+export function getCoachingExpertDelegate(): CoachingExpertDelegate | null {
+  const client = getClient() as PrismaClient & { coachingExpert?: CoachingExpertDelegate };
+  return client.coachingExpert ?? null;
+}
+
+export function requireCoachingExpertDelegate(): CoachingExpertDelegate {
+  const delegate = getCoachingExpertDelegate();
+  if (!delegate) {
+    throw new Error(
+      'CoachingExpert model is unavailable. Stop the Next.js server, run `npx prisma generate`, then restart `npm run dev`.'
+    );
+  }
+  return delegate;
+}
 
 function isRetryableDbError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);

@@ -121,7 +121,7 @@ export default function AdminCmsPage() {
             type="button"
             onClick={() => setTab(t)}
             className={`min-h-10 cursor-pointer rounded-lg px-3 py-2 text-xs font-bold ${
-              tab === t ? 'bg-teal-700 text-white' : 'border border-[var(--border)] text-[var(--muted)]'
+              tab === t ? 'bg-blue-700 text-white' : 'border border-[var(--border)] text-[var(--muted)]'
             }`}
           >
             {t}

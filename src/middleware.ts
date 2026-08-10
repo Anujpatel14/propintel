@@ -1,25 +1,57 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { clerkMiddleware } from '@clerk/nextjs/server';
+import {
+  ADMIN_PANEL_PATH,
+  isAdminPanelPath,
+  isInternalAdminPath,
+  toInternalAdminPath,
+  toPublicAdminPath,
+} from '@/lib/adminPath';
+import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from '@/lib/adminAuth';
 
 /**
- * Auth gate for /dashboard and /admin.
- *
- * IMPORTANT: keep this file named `middleware.ts`, NOT `proxy.ts`.
- * Next.js 16.2.x + Turbopack has a known bug where `src/proxy.ts` makes
- * valid App Router routes return 404 in `next dev` even though the proxy
- * runs (see vercel/next.js#92921, #94739). Keep the Clerk auth gate in
- * `src/middleware.ts` until that bug is fixed upstream.
- *
- * Matcher follows Clerk’s recommended pattern so request auth state is
- * decorated for the whole app (needed by ClerkProvider / client hooks).
- * Keep this file tiny — no logging fetch, no heavy route tables.
+ * Auth gate for /dashboard and the obscured admin panel URL.
+ * Admin panel uses username/password cookie auth (not Clerk).
  */
 export default clerkMiddleware(async (auth, req: NextRequest) => {
   const { pathname } = req.nextUrl;
 
-  const isProtected =
-    pathname.startsWith('/dashboard') || pathname.startsWith('/admin');
+  // Never expose /admin in the browser — bounce to the secret URL
+  if (isInternalAdminPath(pathname)) {
+    const url = req.nextUrl.clone();
+    url.pathname = toPublicAdminPath(pathname);
+    return NextResponse.redirect(url);
+  }
+
+  // Legacy /ops → secret admin entry
+  if (pathname === '/ops' || pathname.startsWith('/ops/')) {
+    const url = req.nextUrl.clone();
+    url.pathname = ADMIN_PANEL_PATH;
+    return NextResponse.redirect(url);
+  }
+
+  if (isAdminPanelPath(pathname)) {
+    const token = req.cookies.get(ADMIN_SESSION_COOKIE)?.value;
+    const adminSession = await verifyAdminSessionToken(token);
+
+    if (!adminSession) {
+      if (pathname === ADMIN_PANEL_PATH || pathname === `${ADMIN_PANEL_PATH}/`) {
+        const url = req.nextUrl.clone();
+        url.pathname = '/admin-gate';
+        return NextResponse.rewrite(url);
+      }
+      const url = req.nextUrl.clone();
+      url.pathname = ADMIN_PANEL_PATH;
+      return NextResponse.redirect(url);
+    }
+
+    const url = req.nextUrl.clone();
+    url.pathname = toInternalAdminPath(pathname);
+    return NextResponse.rewrite(url);
+  }
+
+  const isProtected = pathname.startsWith('/dashboard');
 
   if (!isProtected) {
     return NextResponse.next();
@@ -37,9 +69,7 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and static files
     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    // Always run for API routes
     '/(api|trpc)(.*)',
   ],
 };

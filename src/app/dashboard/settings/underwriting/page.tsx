@@ -27,7 +27,7 @@ export default function UnderwritingSettingsPage() {
     customPdfSubtitle: 'Confidential underwriting dossier',
     customPdfDisclaimer:
       'This analysis is for informational purposes only and does not constitute financial advice.',
-    brandColor: '#0f766e',
+    brandColor: '#1d4ed8',
   });
 
   useEffect(() => {
@@ -50,7 +50,7 @@ export default function UnderwritingSettingsPage() {
             customPdfDisclaimer:
               s.customPdfDisclaimer ||
               'This analysis is for informational purposes only and does not constitute financial advice.',
-            brandColor: s.brandColor || '#0f766e',
+            brandColor: s.brandColor || '#1d4ed8',
           });
         }
       } catch (e) {
@@ -87,7 +87,7 @@ export default function UnderwritingSettingsPage() {
         <section className="surface-card space-y-5 p-6">
           <div>
             <h2 className="flex items-center gap-2 text-sm font-bold">
-              <Calculator className="h-4 w-4 text-teal-700" /> Default assumptions
+              <Calculator className="h-4 w-4 text-blue-700" /> Default assumptions
             </h2>
             <p className="mt-1 text-xs text-[var(--muted)]">
               Pre-filled when you open the Property Analyzer. Change anytime.
@@ -129,7 +129,7 @@ export default function UnderwritingSettingsPage() {
         <section className="surface-card space-y-5 p-6">
           <div>
             <h2 className="flex items-center gap-2 text-sm font-bold">
-              <FileText className="h-4 w-4 text-teal-700" /> PDF report branding
+              <FileText className="h-4 w-4 text-blue-700" /> PDF report branding
             </h2>
             <p className="mt-1 text-xs text-[var(--muted)]">
               Applied when exporting underwriting dossiers for buyers or partners.

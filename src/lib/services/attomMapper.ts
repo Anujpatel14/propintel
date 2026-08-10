@@ -92,16 +92,26 @@ export function mapAttomProperty(raw: AttomRawProperty): MappedProperty | null {
 
   const marketValue = pickNum(
     assessment.market?.mktTtlValue,
+    (assessment.market as { mktttlvalue?: number } | undefined)?.mktttlvalue,
     assessment.assessed?.marketTtlValue
   );
-  const assessedValue = pickNum(assessment.assessed?.assdTtlValue);
+  const assessedValue = pickNum(
+    assessment.assessed?.assdTtlValue,
+    (assessment.assessed as { assdttlvalue?: number } | undefined)?.assdttlvalue
+  );
   const avmValue = pickNum(
     (raw.avm as { amount?: { value?: number } } | undefined)?.amount?.value
   );
 
   const estimatedValue = pickNum(avmValue, marketValue, saleAmt, assessedValue);
-  const taxAmount = pickNum(assessment.tax?.taxAmt);
-  const taxYear = pickNum(assessment.tax?.taxYear);
+  const taxAmount = pickNum(
+    assessment.tax?.taxAmt,
+    (assessment.tax as { taxamt?: number } | undefined)?.taxamt
+  );
+  const taxYear = pickNum(
+    assessment.tax?.taxYear,
+    (assessment.tax as { taxyear?: number } | undefined)?.taxyear
+  );
 
   const squareFeet = pickNum(
     (size as { universalSize?: number }).universalSize,

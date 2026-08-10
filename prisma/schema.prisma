@@ -176,6 +176,7 @@ model PropertyAnalysis {
   dscr            Float?
   cashOnCash      Float?
   strategyType    String   @default("hold") // hold | rental
+  pipelineStatus  String   @default("UNDER_REVIEW") // LEAD | UNDER_REVIEW | OFFER_MADE | UNDER_CONTRACT | CLOSED | LOST
   aiVerdict       String?
   aiHeadline      String?
   aiPayloadJson   String? // summary, strengths, risks, provider, reportText
@@ -186,26 +187,27 @@ model PropertyAnalysis {
 }
 
 model FlipAnalysis {
-  id            String   @id @default(uuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  address       String
-  purchasePrice Float
-  rehabCost     Float
-  arv           Float
-  financingCost Float    @default(0)
-  holdingCost   Float    @default(0)
-  sellingCost   Float    @default(0)
-  profit        Float?
-  roi           Float?
-  mao           Float?
-  aiVerdict     String?
-  aiHeadline    String?
-  aiPayloadJson String?
-  isFavorite    Boolean  @default(false)
-  isArchived    Boolean  @default(false)
-  deletedAt     DateTime?
-  createdAt     DateTime @default(now())
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address        String
+  purchasePrice  Float
+  rehabCost      Float
+  arv            Float
+  financingCost  Float    @default(0)
+  holdingCost    Float    @default(0)
+  sellingCost    Float    @default(0)
+  profit         Float?
+  roi            Float?
+  mao            Float?
+  pipelineStatus String   @default("UNDER_REVIEW")
+  aiVerdict      String?
+  aiHeadline     String?
+  aiPayloadJson  String?
+  isFavorite     Boolean  @default(false)
+  isArchived     Boolean  @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime @default(now())
 }
 
 model RentalAnalysis {
@@ -251,9 +253,28 @@ model Coaching {
   calendarEventId String?
   paymentStatus   String   @default("UNPAID") // PAID, UNPAID
   coachName       String?
+  expertId        String?
+  expert          CoachingExpert? @relation(fields: [expertId], references: [id], onDelete: SetNull)
   topic           String?
   notes           String?
   createdAt       DateTime @default(now())
+
+  @@index([status, bookingDate])
+  @@index([expertId])
+}
+
+/** Admin-managed coaching experts shown on the investor Coaching page */
+model CoachingExpert {
+  id          String     @id @default(uuid())
+  name        String
+  specialty   String?
+  bio         String?    @db.Text
+  avatarInitial String?
+  isActive    Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  bookings    Coaching[]
 }
 
 model ActivityLog {
@@ -295,6 +316,7 @@ model Property {
   apn             String?
   ownerOccupied   Boolean?
   notes           String?  @db.Text
+  pipelineStatus  String   @default("LEAD") // LEAD | UNDER_REVIEW | OFFER_MADE | UNDER_CONTRACT | CLOSED | LOST
   rawJson         String?  @db.Text
   source          String   @default("ATTOM") // ATTOM | MANUAL | CSV | MLS
   createdAt       DateTime @default(now())

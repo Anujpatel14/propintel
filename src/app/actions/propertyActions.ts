@@ -186,9 +186,25 @@ export async function updateMyPropertyAction(
     squareFeet?: number;
     yearBuilt?: number;
     propertyType?: string;
+    pipelineStatus?: string;
   }
 ) {
   const user = await requireAuth();
+
+  if (input.pipelineStatus) {
+    const { isPipelineStatus } = await import('@/lib/services/dealPipelineSync');
+    if (!isPipelineStatus(input.pipelineStatus)) {
+      return { success: false as const, error: 'Invalid status' };
+    }
+  }
+
+  const existing = await withDbRetry(() =>
+    prisma.property.findFirst({
+      where: { id: propertyId, userId: user.id },
+    })
+  );
+  if (!existing) return { success: false as const, error: 'Not found' };
+
   const result = await withDbRetry(() =>
     prisma.property.updateMany({
       where: { id: propertyId, userId: user.id },
@@ -207,12 +223,123 @@ export async function updateMyPropertyAction(
         ...(input.propertyType !== undefined
           ? { propertyType: input.propertyType }
           : {}),
+        ...(input.pipelineStatus !== undefined
+          ? { pipelineStatus: input.pipelineStatus }
+          : {}),
       },
     })
   );
-  if (!result.count) return { success: false as const, error: "Not found" };
+  if (!result.count) return { success: false as const, error: 'Not found' };
+
+  if (input.pipelineStatus) {
+    const {
+      syncCrmStageByAddress,
+      revalidateDealPaths,
+      isPipelineStatus,
+    } = await import('@/lib/services/dealPipelineSync');
+    if (isPipelineStatus(input.pipelineStatus)) {
+      const address = [existing.address, existing.city, existing.state, existing.zip]
+        .filter(Boolean)
+        .join(', ');
+      await syncCrmStageByAddress(user.id, address || existing.address, input.pipelineStatus);
+      revalidateDealPaths();
+    }
+  }
+
   revalidatePath("/dashboard/properties");
   revalidatePath("/dashboard/portfolio");
   revalidatePath(`/dashboard/properties/${propertyId}`);
+  revalidatePath("/dashboard/crm");
   return { success: true as const };
+}
+
+/**
+ * Create a Deal (saved analysis) from a My Properties asset with sensible defaults.
+ * Investors can refine numbers later on the deal / analyzer pages.
+ */
+export async function sendPropertyToDealAction(
+  propertyId: string,
+  strategy: 'hold' | 'flip' | 'rental' = 'hold'
+) {
+  const user = await requireAuth();
+  const property = await getImportedProperty(user.id, propertyId);
+  if (!property) return { success: false as const, error: 'Property not found' };
+
+  const purchasePrice = Math.max(0, property.estimatedValue || 0);
+  if (!purchasePrice) {
+    return {
+      success: false as const,
+      error: 'Set an estimated value on this property before sending to a deal.',
+    };
+  }
+
+  const { savePropertyAnalysis, saveFlipAnalysis } = await import(
+    '@/app/actions/analysisActions'
+  );
+
+  if (strategy === 'flip') {
+    const rehabCost = Math.round(purchasePrice * 0.1);
+    const arv = Math.round(purchasePrice * 1.2);
+    const result = await saveFlipAnalysis({
+      address: property.address,
+      purchasePrice,
+      rehabCost,
+      arv,
+    });
+    if (!result.success) {
+      return { success: false as const, error: 'Could not create flip deal' };
+    }
+    return {
+      success: true as const,
+      dealId: result.flip.id,
+      strategy: 'flip' as const,
+      updated: result.updated,
+    };
+  }
+
+  const rent = Math.max(0, property.estimatedRent || 0);
+  const taxes = Math.max(0, property.taxAmount || purchasePrice * 0.012);
+  const result = await savePropertyAnalysis({
+    address: property.address,
+    city: property.city || '',
+    state: property.state || '',
+    zip: property.zip || '',
+    purchasePrice,
+    rehabCost: 0,
+    arv: purchasePrice,
+    rent,
+    downPayment: 20,
+    taxes,
+    insurance: Math.round(purchasePrice * 0.0035),
+    hoa: 0,
+    vacancyRate: 5,
+    maintenanceRate: 5,
+    mortgageRate: 6.5,
+    mortgageTerm: 30,
+    strategyType: strategy === 'rental' ? 'rental' : 'hold',
+  });
+
+  if (!result.success) {
+    return { success: false as const, error: 'Could not create deal' };
+  }
+
+  // Align property pipeline with deal when sending
+  try {
+    await prisma.property.updateMany({
+      where: { id: propertyId, userId: user.id },
+      data: { pipelineStatus: 'UNDER_REVIEW' },
+    });
+  } catch {
+    /* non-fatal */
+  }
+
+  revalidatePath('/dashboard/properties');
+  revalidatePath(`/dashboard/properties/${propertyId}`);
+
+  return {
+    success: true as const,
+    dealId: result.analysis.id,
+    strategy: (strategy === 'rental' ? 'rental' : 'hold') as 'hold' | 'rental',
+    updated: result.updated,
+  };
 }

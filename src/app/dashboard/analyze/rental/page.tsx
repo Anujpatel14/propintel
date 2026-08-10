@@ -1,11 +1,18 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, Cpu, FileDown, Loader2, Save } from 'lucide-react';
-import PageHeader from '@/components/dashboard/PageHeader';
-import SpotlightCard from '@/components/ui/SpotlightCard';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { Sparkles } from 'lucide-react';
 import { AiVerdictCard } from '@/components/dashboard/AiVerdictCard';
+import {
+  AnalyzeActions,
+  AnalyzeAddressField,
+  AnalyzeField,
+  MetricTile,
+  SectionLabel,
+} from '@/components/dashboard/AnalyzeUI';
+import { AreaChart, BarChart } from '@/components/ui/Charts';
 import { money, pct, rentalMetrics } from '@/lib/calculators';
 import { savePropertyAnalysis } from '@/app/actions/analysisActions';
 import { analyzeDealAction, type AiVerdictPreview } from '@/app/actions/analyzeActions';
@@ -13,39 +20,9 @@ import { createReportAction } from '@/app/actions/reportActions';
 import { exportToPDF } from '@/lib/services/reports';
 import { useToast } from '@/components/ui/Toast';
 
-function Field({
-  label,
-  value,
-  onChange,
-  suffix,
-}: {
-  label: string;
-  value: number;
-  onChange: (n: number) => void;
-  suffix?: string;
-}) {
-  return (
-    <label className="block space-y-1">
-      <span className="text-xs text-[var(--muted)]">{label}</span>
-      <div className="relative">
-        <input
-          type="number"
-          value={Number.isFinite(value) ? value : 0}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-800/30"
-        />
-        {suffix ? (
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--muted)]">
-            {suffix}
-          </span>
-        ) : null}
-      </div>
-    </label>
-  );
-}
-
 export default function RentalAnalyzePage() {
   const toast = useToast();
+  const router = useRouter();
   const [address, setAddress] = useState('789 Rental Rd');
   const [city, setCity] = useState('Dallas');
   const [state, setState] = useState('TX');
@@ -73,6 +50,25 @@ export default function RentalAnalyzePage() {
         rentGrowth,
       }),
     [purchasePrice, rent, expenses, mortgage, downPayment, years, rentGrowth]
+  );
+
+  const cumulativeSeries = useMemo(
+    () =>
+      m.projection.map((row) => ({
+        label: `Y${row.year}`,
+        value: Math.round(row.cumulative),
+      })),
+    [m.projection]
+  );
+
+  const cashFlowSeries = useMemo(
+    () =>
+      m.projection.map((row) => ({
+        label: `Y${row.year}`,
+        value: Math.round(row.cashFlow),
+        tone: (row.cashFlow >= 0 ? 'up' : 'down') as 'up' | 'down',
+      })),
+    [m.projection]
   );
 
   const runAi = async () => {
@@ -141,7 +137,8 @@ export default function RentalAnalyzePage() {
             }
           : null,
       });
-      toast.success('Deal saved', 'Open it under Deals');
+      toast.success('Deal saved', 'Added to Deals + CRM underwriting');
+      router.push('/dashboard/deals');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -174,127 +171,183 @@ export default function RentalAnalyzePage() {
     toast.success('PDF downloaded');
   };
 
+  const endCumulative = m.projection[m.projection.length - 1]?.cumulative ?? 0;
+
   return (
-    <div className="space-y-8">
-      <PageHeader
-        title="Rental analysis"
-        description="Calculator, projection, AI, save deal, and PDF — one workflow."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/dashboard/analyze"
-              className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
-            >
-              <ArrowLeft className="h-4 w-4" /> Analyze hub
-            </Link>
-            <button
-              type="button"
-              disabled={aiRunning}
-              onClick={() => void runAi()}
-              className="inline-flex items-center gap-2 rounded-lg border border-teal-800/30 bg-teal-800/10 px-3 py-2 text-sm font-medium text-teal-900 disabled:opacity-60"
-            >
-              {aiRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cpu className="h-4 w-4" />}
-              Run AI
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void saveDeal()}
-              className="inline-flex items-center gap-2 rounded-lg bg-teal-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save deal
-            </button>
-            <button
-              type="button"
-              onClick={() => void generateReport()}
-              className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
-            >
-              <FileDown className="h-4 w-4" /> Report PDF
-            </button>
+    <div className="mx-auto max-w-[1200px] space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-[#dbe7ff] px-3 py-1 text-[10px] font-bold tracking-[0.14em] text-[#1639a8] uppercase">
+            Rental · Projection
           </div>
-        }
-      />
-
-      <div className="grid gap-4 lg:grid-cols-5">
-        <SpotlightCard className="space-y-4 p-5 lg:col-span-2">
-          <h2 className="font-display text-lg">Calculator</h2>
-          <div className="grid gap-3">
-            <label className="block space-y-1">
-              <span className="text-xs text-[var(--muted)]">Address</span>
-              <input
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
-              />
-            </label>
-            <Field label="Purchase price" value={purchasePrice} onChange={setPurchasePrice} />
-            <Field label="Monthly rent" value={rent} onChange={setRent} />
-            <Field label="Monthly expenses" value={expenses} onChange={setExpenses} />
-            <Field label="Mortgage / mo" value={mortgage} onChange={setMortgage} />
-            <Field label="Cash down" value={downPayment} onChange={setDownPayment} />
-            <Field label="Projection years" value={years} onChange={setYears} />
-            <Field label="Rent growth" value={rentGrowth} onChange={setRentGrowth} suffix="%" />
-          </div>
-          <div className="border-t border-[var(--border)] pt-2">
-            {(
-              [
-                { label: 'Cash flow / mo', value: money(m.cashFlow), good: m.cashFlow >= 0 },
-                { label: 'Cap rate', value: pct(m.capRate) },
-                { label: 'DSCR', value: m.dscr.toFixed(2) },
-                { label: 'Cash on cash', value: pct(m.cashOnCash) },
-              ] as const
-            ).map((row) => (
-              <div key={row.label} className="flex justify-between border-b border-[var(--border)] py-2.5 last:border-0">
-                <span className="text-xs text-[var(--muted)]">{row.label}</span>
-                <span
-                  className={`text-sm font-semibold ${
-                    'good' in row ? (row.good ? 'text-teal-800' : 'text-red-700') : ''
-                  }`}
-                >
-                  {row.value}
-                </span>
-              </div>
-            ))}
-          </div>
-        </SpotlightCard>
-
-        <SpotlightCard className="overflow-x-auto p-5 lg:col-span-3">
-          <h2 className="mb-4 font-display text-lg">Results · projection</h2>
-          <table className="w-full min-w-[480px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border)] text-xs uppercase tracking-wide text-[var(--muted)]">
-                <th className="pb-2 font-medium">Year</th>
-                <th className="pb-2 font-medium">Rent / mo</th>
-                <th className="pb-2 font-medium">Cash flow / mo</th>
-                <th className="pb-2 font-medium">Cumulative</th>
-              </tr>
-            </thead>
-            <tbody>
-              {m.projection.map((row) => (
-                <tr key={row.year} className="border-b border-[var(--border)] last:border-0">
-                  <td className="py-2.5">{row.year}</td>
-                  <td className="py-2.5">{money(row.rent)}</td>
-                  <td className={`py-2.5 font-medium ${row.cashFlow >= 0 ? 'text-teal-800' : 'text-red-700'}`}>
-                    {money(row.cashFlow)}
-                  </td>
-                  <td className="py-2.5">{money(row.cumulative)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </SpotlightCard>
+          <h1 className="mt-3 font-display text-3xl font-bold tracking-tight text-[#0b1220]">
+            Rental analysis
+          </h1>
+          <p className="mt-1.5 max-w-xl text-sm text-[var(--muted)]">
+            Calculator, projection chart, AI, save deal, and PDF — one workflow.
+          </p>
+        </div>
+        <AnalyzeActions
+          aiRunning={aiRunning}
+          saving={saving}
+          onAi={() => void runAi()}
+          onSave={() => void saveDeal()}
+          onReport={() => void generateReport()}
+        />
       </div>
 
-      <section className="space-y-3">
-        <h2 className="font-display text-xl">AI summary</h2>
-        {aiPreview ? (
-          <AiVerdictCard analysis={aiPreview} />
-        ) : (
-          <p className="rounded-xl border border-dashed border-[var(--border)] px-4 py-8 text-center text-sm text-[var(--muted)]">
-            Optional AI verdict before you save the rental deal.
-          </p>
-        )}
+      <motion.section
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[#0b1220] p-5 text-white sm:p-6"
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_80%_at_100%_0%,rgba(59,130,246,0.35),transparent_55%)]" />
+        <div className="relative grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.14em] text-blue-200/80 uppercase">
+              Cash flow / mo
+            </p>
+            <p
+              className={`mt-1 font-display text-3xl font-bold ${
+                m.cashFlow >= 0 ? 'text-emerald-300' : 'text-rose-300'
+              }`}
+            >
+              {money(m.cashFlow)}
+            </p>
+            <p className="mt-1 truncate text-xs text-white/55">{address}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.14em] text-blue-200/80 uppercase">
+              Cap rate
+            </p>
+            <p className="mt-1 font-display text-2xl font-bold">{pct(m.capRate)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.14em] text-blue-200/80 uppercase">
+              Cash on cash
+            </p>
+            <p className="mt-1 font-display text-2xl font-bold">{pct(m.cashOnCash)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.14em] text-blue-200/80 uppercase">
+              {years}-yr cumulative
+            </p>
+            <p className="mt-1 font-display text-2xl font-bold">{money(endCumulative)}</p>
+          </div>
+        </div>
+      </motion.section>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricTile label="DSCR" value={m.dscr.toFixed(2)} />
+        <MetricTile label="Monthly rent" value={money(rent)} />
+        <MetricTile label="Expenses / mo" value={money(expenses)} />
+        <MetricTile label="Mortgage / mo" value={money(mortgage)} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-5">
+        <div className="space-y-4 rounded-3xl border border-[var(--border)] bg-white p-5 lg:col-span-2">
+          <SectionLabel>Calculator</SectionLabel>
+          <div className="grid gap-3">
+            <AnalyzeAddressField value={address} onChange={setAddress} />
+            <AnalyzeField
+              label="Purchase price"
+              prefix="$"
+              value={purchasePrice}
+              onChange={setPurchasePrice}
+            />
+            <AnalyzeField label="Monthly rent" prefix="$" value={rent} onChange={setRent} />
+            <AnalyzeField
+              label="Monthly expenses"
+              prefix="$"
+              value={expenses}
+              onChange={setExpenses}
+            />
+            <AnalyzeField label="Mortgage / mo" prefix="$" value={mortgage} onChange={setMortgage} />
+            <AnalyzeField
+              label="Cash down"
+              prefix="$"
+              value={downPayment}
+              onChange={setDownPayment}
+            />
+            <AnalyzeField label="Projection years" value={years} onChange={setYears} />
+            <AnalyzeField
+              label="Rent growth"
+              value={rentGrowth}
+              onChange={setRentGrowth}
+              suffix="%"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-5 rounded-3xl border border-[var(--border)] bg-white p-5 lg:col-span-3">
+          <div>
+            <SectionLabel>Cumulative cash flow</SectionLabel>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Growth over {years} years at {rentGrowth}% rent increases
+            </p>
+            <div className="mt-3">
+              <AreaChart
+                data={cumulativeSeries}
+                height={200}
+                color="#1d4ed8"
+                gradientId="rental-cum"
+                showGlow
+              />
+            </div>
+          </div>
+
+          <div>
+            <SectionLabel>Monthly cash flow by year</SectionLabel>
+            <div className="mt-2">
+              <BarChart data={cashFlowSeries} height={160} />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
+            <table className="w-full min-w-[480px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border)] bg-[var(--surface-soft)] text-[10px] font-bold tracking-wide text-[var(--muted)] uppercase">
+                  <th className="px-3 py-2.5">Year</th>
+                  <th className="px-3 py-2.5">Rent / mo</th>
+                  <th className="px-3 py-2.5">Cash flow / mo</th>
+                  <th className="px-3 py-2.5">Cumulative</th>
+                </tr>
+              </thead>
+              <tbody>
+                {m.projection.map((row) => (
+                  <tr key={row.year} className="border-b border-[var(--border)] last:border-0">
+                    <td className="px-3 py-2.5 font-medium">{row.year}</td>
+                    <td className="px-3 py-2.5">{money(row.rent)}</td>
+                    <td
+                      className={`px-3 py-2.5 font-semibold ${
+                        row.cashFlow >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                      }`}
+                    >
+                      {money(row.cashFlow)}
+                    </td>
+                    <td className="px-3 py-2.5 font-semibold">{money(row.cumulative)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <section className="overflow-hidden rounded-3xl border border-[var(--border)] bg-white">
+        <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[linear-gradient(180deg,var(--panel-grad-top),var(--panel-grad-bottom))] px-5 py-4">
+          <Sparkles className="h-4 w-4 text-blue-800" />
+          <h2 className="font-display text-lg font-bold">AI summary</h2>
+        </div>
+        <div className="p-5">
+          {aiPreview ? (
+            <AiVerdictCard analysis={aiPreview} />
+          ) : (
+            <p className="rounded-2xl border border-dashed border-[var(--border)] px-4 py-10 text-center text-sm text-[var(--muted)]">
+              Optional AI verdict before you save the rental deal.
+            </p>
+          )}
+        </div>
       </section>
     </div>
   );

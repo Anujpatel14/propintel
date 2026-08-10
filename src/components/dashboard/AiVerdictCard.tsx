@@ -9,18 +9,18 @@ const VERDICT_STYLES: Record<
   { badge: string; bar: string; label: string }
 > = {
   'STRONG BUY': {
-    badge: 'bg-teal-700 text-white',
-    bar: 'border-teal-700/30 bg-teal-700/5',
+    badge: 'bg-blue-700 text-white',
+    bar: 'border-blue-700/30 bg-blue-700/5',
     label: 'Strong Buy',
   },
   'ACQUIRE WITH CAUTION': {
     badge: 'bg-amber-600 text-white',
-    bar: 'border-amber-500/30 bg-amber-50',
+    bar: 'border-[var(--amber-border)] bg-[var(--amber-soft)]',
     label: 'Acquire with caution',
   },
   'PASS OR RE-NEGOTIATE': {
     badge: 'bg-red-700 text-white',
-    bar: 'border-red-500/25 bg-red-50',
+    bar: 'border-[var(--danger-border)] bg-[var(--danger-soft)]',
     label: 'Pass or re-negotiate',
   },
 };
@@ -36,10 +36,10 @@ export function AiVerdictCard({
 
   return (
     <div className={`overflow-hidden rounded-2xl border ${style.bar}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] bg-white/70 px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_70%,transparent)] px-5 py-4">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-            <Cpu className="h-4 w-4 shrink-0 text-teal-700" />
+            <Cpu className="h-4 w-4 shrink-0 text-[var(--cobalt)]" />
             AI underwriting verdict
           </div>
           <p className="truncate text-xs text-[var(--muted)]">{analysis.address}</p>
@@ -74,7 +74,7 @@ export function AiVerdictCard({
               {analysis.summary.map((row) => (
                 <div
                   key={row.label}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-white px-3 py-2.5 text-xs"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-xs"
                 >
                   <span className="text-[var(--muted)]">{row.label}</span>
                   <span className="font-bold text-foreground">{row.value}</span>
@@ -86,16 +86,16 @@ export function AiVerdictCard({
 
         <div className={`grid grid-cols-1 gap-4 ${compact ? '' : 'md:grid-cols-2'}`}>
           <section>
-            <h4 className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-teal-800">
+            <h4 className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-blue-800">
               <CheckCircle2 className="h-3.5 w-3.5" /> Strengths
             </h4>
             <ul className="space-y-2">
               {analysis.strengths.map((s, i) => (
                 <li
                   key={`${s.title}-${i}`}
-                  className="rounded-xl border border-teal-700/15 bg-white px-3 py-2.5 text-xs"
+                  className="rounded-xl border border-blue-700/15 bg-[var(--surface)] px-3 py-2.5 text-xs"
                 >
-                  <div className="font-bold text-teal-900">{s.title}</div>
+                  <div className="font-bold text-blue-900">{s.title}</div>
                   <p className="mt-0.5 leading-relaxed text-[var(--muted)]">{s.detail}</p>
                 </li>
               ))}
@@ -110,7 +110,7 @@ export function AiVerdictCard({
               {analysis.risks.map((r, i) => (
                 <li
                   key={`${r.title}-${i}`}
-                  className="rounded-xl border border-amber-500/20 bg-white px-3 py-2.5 text-xs"
+                  className="rounded-xl border border-amber-500/20 bg-[var(--surface)] px-3 py-2.5 text-xs"
                 >
                   <div className="font-bold text-amber-950">{r.title}</div>
                   <p className="mt-0.5 leading-relaxed text-[var(--muted)]">{r.detail}</p>

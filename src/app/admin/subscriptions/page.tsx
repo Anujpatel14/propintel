@@ -246,7 +246,7 @@ export default function AdminSubscriptionsPage() {
 
       <SpotlightCard className="space-y-4 p-5 sm:p-6">
         <div className="flex items-start gap-3">
-          <div className="rounded-xl bg-teal-700/10 p-2.5 text-teal-800">
+          <div className="rounded-xl bg-blue-700/10 p-2.5 text-blue-800">
             <UserPlus className="h-4 w-4" />
           </div>
           <div>
@@ -262,7 +262,7 @@ export default function AdminSubscriptionsPage() {
             className={`rounded-xl px-3 py-2 text-xs ${
               assignError
                 ? 'border border-red-200 bg-red-50 text-red-800'
-                : 'border border-teal-700/20 bg-teal-700/10 text-teal-900'
+                : 'border border-blue-700/20 bg-blue-700/10 text-blue-900'
             }`}
           >
             {assignError || assignNotice}
@@ -336,7 +336,7 @@ export default function AdminSubscriptionsPage() {
             </span>
             {' · '}
             current plan{' '}
-            <span className="font-semibold text-teal-800">
+            <span className="font-semibold text-blue-800">
               {selectedUser.subscription?.plan || 'none'}
             </span>
             {selectedUser.subscription?.status
@@ -368,7 +368,7 @@ export default function AdminSubscriptionsPage() {
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="text-[10px] font-bold tracking-wider text-teal-800 uppercase">
+                      <div className="text-[10px] font-bold tracking-wider text-blue-800 uppercase">
                         {p.code}
                         {!p.isActive ? ' · inactive' : ''}
                       </div>
@@ -392,7 +392,7 @@ export default function AdminSubscriptionsPage() {
                         .filter(Boolean)
                         .map((f) => (
                           <li key={f} className="flex items-start gap-1.5">
-                            <Check className="mt-0.5 h-3 w-3 shrink-0 text-teal-700" />
+                            <Check className="mt-0.5 h-3 w-3 shrink-0 text-blue-700" />
                             {f}
                           </li>
                         ))}
@@ -409,7 +409,7 @@ export default function AdminSubscriptionsPage() {
                   <button
                     type="button"
                     onClick={() => openEdit(p)}
-                    className="inline-flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] text-xs font-semibold hover:bg-white"
+                    className="inline-flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] text-xs font-semibold hover:bg-[var(--surface)]"
                   >
                     <Pencil className="h-3.5 w-3.5" /> Edit
                   </button>
@@ -534,7 +534,7 @@ export default function AdminSubscriptionsPage() {
                   <label className="flex items-end gap-2 pb-2 text-xs font-semibold">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 accent-teal-700"
+                      className="h-4 w-4 accent-blue-700"
                       checked={form.isActive}
                       onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
                     />

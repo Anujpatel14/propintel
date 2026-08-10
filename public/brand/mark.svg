@@ -1,9 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="PropIntel">
-  <rect width="64" height="64" rx="14" fill="#0f766e"/>
-  <!-- Building mass -->
-  <path fill="#ffffff" d="M16 48V22h10v26H16zm14 0V14h12v34H30zm16 0V26h10v22H46z"/>
-  <!-- Windows -->
-  <path fill="#0f766e" fill-opacity="0.35" d="M19 26h4v3h-4v-3zm0 7h4v3h-4v-3zm0 7h4v3h-4v-3zm14-17h4v3h-4v-3zm0 7h4v3h-4v-3zm0 7h4v3h-4v-3zm0 7h4v3h-4v-3zm16-10h4v3h-4v-3zm0 7h4v3h-4v-3z"/>
-  <!-- Intelligence accent -->
-  <rect x="48" y="12" width="8" height="8" rx="2" fill="#c4a050"/>
+  <defs>
+    <linearGradient id="pi-mark-bg" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="pi-mark-shine" x1="18" y1="10" x2="42" y2="34" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#pi-mark-bg)"/>
+  <rect width="64" height="64" rx="16" fill="url(#pi-mark-shine)"/>
+  <!-- Roof / signal peak -->
+  <path d="M14 34.5L32 16l18 18.5" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Structure -->
+  <path d="M20 34.5V48h24V34.5" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Intelligence pulse bars -->
+  <path d="M27 48V40.5M32 48V37M37 48V42" stroke="#93C5FD" stroke-width="3.2" stroke-linecap="round"/>
+  <!-- Accent node -->
+  <circle cx="32" cy="16" r="3.2" fill="#F8FAFC"/>
 </svg>

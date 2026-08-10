@@ -175,8 +175,8 @@ export default function CompareDealsPage() {
                   onClick={() => toggle(deal.id)}
                   className={`cursor-pointer rounded-xl border p-4 text-left transition ${
                     checked
-                      ? 'border-teal-700/40 bg-teal-700/5'
-                      : 'border-[var(--border)] bg-white hover:border-teal-700/20'
+                      ? 'border-blue-700/40 bg-blue-700/5'
+                      : 'border-[var(--border)] bg-white hover:border-blue-700/20'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -186,7 +186,7 @@ export default function CompareDealsPage() {
                       </span>
                       <div className="mt-1 text-sm font-bold">{deal.address}</div>
                     </div>
-                    {checked && <Check className="h-4 w-4 shrink-0 text-teal-700" />}
+                    {checked && <Check className="h-4 w-4 shrink-0 text-blue-700" />}
                   </div>
                 </button>
               );
@@ -196,7 +196,7 @@ export default function CompareDealsPage() {
           {selectedDeals.length >= 2 && (
             <div className="surface-card overflow-x-auto p-6">
               <div className="mb-4 flex items-center gap-2 text-sm font-bold">
-                <ArrowRightLeft className="h-4 w-4 text-teal-700" /> Comparison
+                <ArrowRightLeft className="h-4 w-4 text-blue-700" /> Comparison
               </div>
               <table className="w-full border-collapse text-left text-sm">
                 <thead>
@@ -223,7 +223,7 @@ export default function CompareDealsPage() {
                           <td
                             key={d.id}
                             className={`px-4 py-3 font-semibold ${
-                              bestId === d.id ? 'text-teal-800' : 'text-foreground'
+                              bestId === d.id ? 'text-blue-800' : 'text-foreground'
                             }`}
                           >
                             {m.format(Number(d[m.key]) || 0)}

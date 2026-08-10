@@ -4,55 +4,49 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar as CalendarIcon,
-  Video,
   Clock,
   Check,
-  Sparkles,
   Loader2,
   Pencil,
   Trash2,
   X,
-  ExternalLink,
   Search,
-  AlertTriangle,
+  Send,
+  UserRound,
+  Inbox,
 } from 'lucide-react';
-import SpotlightCard from '@/components/ui/SpotlightCard';
-import PageHeader from '@/components/dashboard/PageHeader';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import {
   bookCoachingSession,
+  getActiveCoachingExperts,
   getUserCoachingSessions,
   updateUserCoachingSession,
   deleteUserCoachingSession,
 } from '@/app/actions/coachingActions';
 
+interface Expert {
+  id: string;
+  name: string;
+  specialty: string | null;
+  bio: string | null;
+  avatarInitial: string | null;
+}
+
 interface Booking {
   id: string;
   coach: string;
+  expertId: string | null;
   topic: string;
   date: string;
   time: string;
-  meetingLink: string | null;
   status: string;
   bookingDate: Date;
+  notes: string | null;
 }
 
 type SessionFilter = 'upcoming' | 'past' | 'all';
 
-const COACHES = [
-  { name: 'Marcus Sterling', specialty: 'Fix & Flip / Construction', avatar: 'M' },
-  { name: 'Diana Jenkins', specialty: 'Buy & Hold / DSCR', avatar: 'D' },
-  { name: 'Elena Rostova', specialty: 'Wholesaling / Outreach', avatar: 'E' },
-];
-
-const TIME_SLOTS = [
-  '9:00 AM',
-  '10:00 AM',
-  '11:30 AM',
-  '1:00 PM',
-  '3:30 PM',
-  '5:00 PM',
-];
+const TIME_SLOTS = ['9:00 AM', '10:00 AM', '11:30 AM', '1:00 PM', '3:30 PM', '5:00 PM'];
 
 function parseTimeToHours(timeLabel: string): { hours: number; minutes: number } {
   const match = timeLabel.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
@@ -82,14 +76,16 @@ function mapSession(s: {
   id: string;
   bookingDate: Date | string;
   coachName: string | null;
+  expertId?: string | null;
   topic: string | null;
-  meetingLink: string | null;
   status: string;
+  notes?: string | null;
 }): Booking {
   const dt = new Date(s.bookingDate);
   return {
     id: s.id,
-    coach: s.coachName || 'Assigned Advisor',
+    coach: s.coachName || 'Assigned advisor',
+    expertId: s.expertId || null,
     topic: s.topic || 'Strategy Session',
     date: formatDateInput(dt),
     time: dt.toLocaleTimeString('en-US', {
@@ -97,26 +93,26 @@ function mapSession(s: {
       minute: '2-digit',
       hour12: true,
     }),
-    meetingLink: s.meetingLink,
     status: s.status,
     bookingDate: dt,
+    notes: s.notes || null,
   };
 }
 
 function statusStyles(status: string) {
   switch (status.toUpperCase()) {
     case 'CONFIRMED':
-      return 'bg-teal-700/12 text-teal-800';
+      return 'bg-emerald-50 text-emerald-800 ring-emerald-200';
     case 'PENDING':
-      return 'bg-amber-500/12 text-amber-800';
+      return 'bg-amber-50 text-amber-900 ring-amber-200';
     case 'COMPLETED':
-      return 'bg-slate-500/12 text-slate-700';
+      return 'bg-slate-100 text-slate-700 ring-slate-200';
     case 'EXPIRED':
-      return 'bg-orange-500/12 text-orange-800';
+      return 'bg-orange-50 text-orange-800 ring-orange-200';
     case 'CANCELED':
-      return 'bg-red-500/10 text-red-700';
+      return 'bg-rose-50 text-rose-700 ring-rose-200';
     default:
-      return 'bg-teal-700/10 text-teal-800';
+      return 'bg-blue-50 text-blue-800 ring-blue-200';
   }
 }
 
@@ -125,135 +121,123 @@ function isInactiveStatus(status: string) {
   return s === 'EXPIRED' || s === 'CANCELED' || s === 'COMPLETED';
 }
 
-function canJoinSession(b: Booking) {
-  return Boolean(b.meetingLink) && !isInactiveStatus(b.status);
-}
-
-function coachInitial(name: string) {
-  return name.trim().charAt(0).toUpperCase() || '?';
+function coachInitial(name: string, fallback?: string | null) {
+  return (fallback || name.trim().charAt(0) || '?').toUpperCase();
 }
 
 export default function CoachingPortalPage() {
+  const [experts, setExperts] = useState<Expert[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedCoach, setSelectedCoach] = useState(COACHES[0].name);
+  const [selectedExpertId, setSelectedExpertId] = useState<string>('');
   const [bookingTopic, setBookingTopic] = useState('Deal Underwriting Strategy Review');
   const [bookingDate, setBookingDate] = useState(tomorrowInput);
   const [bookingTime, setBookingTime] = useState('10:00 AM');
   const [isBooking, setIsBooking] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<SessionFilter>('upcoming');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Booking | null>(null);
-  const [editCoach, setEditCoach] = useState('');
+  const [editExpertId, setEditExpertId] = useState('');
   const [editTopic, setEditTopic] = useState('');
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('');
-  const [editStatus, setEditStatus] = useState('CONFIRMED');
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [meetConfigured, setMeetConfigured] = useState(true);
-  const [formNotice, setFormNotice] = useState<{ type: 'success' | 'warn' | 'error'; text: string } | null>(
-    null
-  );
+  const [savingEdit, setSavingEdit] = useState(false);
 
-  const loadSessions = async () => {
+  const load = async () => {
+    setIsLoading(true);
     try {
-      const result = await getUserCoachingSessions();
-      if (result.success) {
-        setBookings(result.sessions.map(mapSession));
-        setMeetConfigured(result.meetConfigured);
+      const [expRes, sesRes] = await Promise.all([
+        getActiveCoachingExperts(),
+        getUserCoachingSessions(),
+      ]);
+      const list = expRes.experts as Expert[];
+      setExperts(list);
+      if (list.length && !selectedExpertId) {
+        setSelectedExpertId(list[0].id);
       }
+      setBookings(sesRes.sessions.map(mapSession));
     } catch (e) {
       console.error(e);
+      setError('Could not load coaching data. If this persists, restart the app after prisma generate.');
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadSessions();
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const startToday = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, [bookings.length, isLoading]);
+  const selectedExpert = experts.find((e) => e.id === selectedExpertId) || experts[0];
 
   const filteredBookings = useMemo(() => {
+    const now = new Date();
     const q = search.trim().toLowerCase();
     return bookings
       .filter((b) => {
-        const inactive = isInactiveStatus(b.status);
         if (filter === 'upcoming') {
-          return b.bookingDate >= startToday && !inactive;
+          const upcoming =
+            (b.status === 'PENDING' || b.status === 'CONFIRMED') && b.bookingDate >= now;
+          if (!upcoming) return false;
         }
         if (filter === 'past') {
-          return b.bookingDate < startToday || inactive;
+          const past = isInactiveStatus(b.status) || b.bookingDate < now;
+          if (!past) return false;
         }
-        return true;
-      })
-      .filter((b) => {
         if (!q) return true;
         return (
-          b.topic.toLowerCase().includes(q) ||
           b.coach.toLowerCase().includes(q) ||
+          b.topic.toLowerCase().includes(q) ||
           b.status.toLowerCase().includes(q)
         );
       })
-      .sort((a, b) => {
-        if (filter === 'past') return b.bookingDate.getTime() - a.bookingDate.getTime();
-        return a.bookingDate.getTime() - b.bookingDate.getTime();
-      });
-  }, [bookings, filter, search, startToday]);
+      .sort((a, b) => a.bookingDate.getTime() - b.bookingDate.getTime());
+  }, [bookings, filter, search]);
 
-  const counts = useMemo(() => {
+  const stats = useMemo(() => {
+    const now = new Date();
     const upcoming = bookings.filter(
-      (b) => b.bookingDate >= startToday && !isInactiveStatus(b.status)
+      (b) => (b.status === 'PENDING' || b.status === 'CONFIRMED') && b.bookingDate >= now
     ).length;
-    const past = bookings.filter(
-      (b) => b.bookingDate < startToday || isInactiveStatus(b.status)
-    ).length;
-    return { upcoming, past, all: bookings.length };
-  }, [bookings, startToday]);
+    const pending = bookings.filter((b) => b.status === 'PENDING').length;
+    return { total: bookings.length, upcoming, pending };
+  }, [bookings]);
 
-  const handleCreateBooking = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const buildDate = (dateStr: string, timeLabel: string) => {
+    const { hours, minutes } = parseTimeToHours(timeLabel);
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d, hours, minutes, 0, 0);
+  };
+
+  const handleCreateBooking = async () => {
+    if (!selectedExpert) {
+      setError('No experts available yet. Ask an admin to add coaching experts.');
+      return;
+    }
     setIsBooking(true);
-    setFormNotice(null);
-
+    setError(null);
+    setNotice(null);
     try {
-      const { hours, minutes } = parseTimeToHours(bookingTime);
-      const [year, month, day] = bookingDate.split('-').map(Number);
-      const scheduled = new Date(year, month - 1, day, hours, minutes);
-
+      const scheduled = buildDate(bookingDate, bookingTime);
       const result = await bookCoachingSession(scheduled, {
-        coachName: selectedCoach,
+        expertId: selectedExpert.id,
+        coachName: selectedExpert.name,
         topic: bookingTopic,
       });
-
       if (!result.success) {
-        setFormNotice({ type: 'error', text: result.error || 'Could not book session.' });
+        setError(result.error || 'Could not submit request');
         return;
       }
-
-      setBookings((prev) => [mapSession(result.coaching), ...prev]);
-      setFilter('upcoming');
-      if (result.meetWarning) {
-        setFormNotice({ type: 'warn', text: result.meetWarning });
-      } else {
-        setFormNotice({
-          type: 'success',
-          text: result.coaching.meetingLink
-            ? 'Session booked with a live Google Meet link.'
-            : 'Session booked successfully.',
-        });
-      }
-      setTimeout(() => setFormNotice(null), 6000);
-    } catch (err) {
-      console.error(err);
-      setFormNotice({ type: 'error', text: 'Booking failed. Please try again.' });
+      setNotice(
+        `Request sent for ${selectedExpert.name}. An admin will review and confirm the time.`
+      );
+      await load();
+    } catch (e) {
+      console.error(e);
+      setError('Could not submit booking request.');
     } finally {
       setIsBooking(false);
     }
@@ -261,555 +245,408 @@ export default function CoachingPortalPage() {
 
   const openEdit = (b: Booking) => {
     setEditing(b);
-    setEditCoach(b.coach);
+    setEditExpertId(
+      b.expertId || experts.find((e) => e.name === b.coach)?.id || experts[0]?.id || ''
+    );
     setEditTopic(b.topic);
     setEditDate(b.date);
     setEditTime(
-      TIME_SLOTS.includes(b.time.replace(/\s*EST$/i, '').trim())
-        ? b.time.replace(/\s*EST$/i, '').trim()
-        : TIME_SLOTS[1]
+      TIME_SLOTS.find((t) => t.replace(/\s/g, '') === b.time.replace(/\s/g, '')) || TIME_SLOTS[1]
     );
-    setEditStatus(b.status);
-    setConfirmDeleteId(null);
   };
 
-  const handleSaveEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const saveEdit = async () => {
     if (!editing) return;
-    setIsSavingEdit(true);
-
+    setSavingEdit(true);
     try {
-      const { hours, minutes } = parseTimeToHours(editTime);
-      const [year, month, day] = editDate.split('-').map(Number);
-      const scheduled = new Date(year, month - 1, day, hours, minutes);
-
-      const result = await updateUserCoachingSession(editing.id, {
-        bookingDate: scheduled,
-        coachName: editCoach,
+      const expert = experts.find((e) => e.id === editExpertId);
+      await updateUserCoachingSession(editing.id, {
+        bookingDate: buildDate(editDate, editTime),
+        expertId: editExpertId || undefined,
+        coachName: expert?.name,
         topic: editTopic,
-        status: editStatus,
       });
-
-      if (result.success && result.coaching) {
-        const mapped = mapSession(result.coaching);
-        setBookings((prev) => prev.map((b) => (b.id === mapped.id ? mapped : b)));
-        setEditing(null);
-      }
-    } catch (err) {
-      console.error(err);
+      setEditing(null);
+      await load();
     } finally {
-      setIsSavingEdit(false);
+      setSavingEdit(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    setDeletingId(id);
-    try {
-      const result = await deleteUserCoachingSession(id);
-      if (result.success) {
-        setBookings((prev) => prev.filter((b) => b.id !== id));
-        if (editing?.id === id) setEditing(null);
-        setConfirmDeleteId(null);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setDeletingId(null);
-    }
+  const cancelRequest = async (id: string) => {
+    await updateUserCoachingSession(id, { status: 'CANCELED' });
+    await load();
   };
 
-  const filterTabs: { key: SessionFilter; label: string; count: number }[] = [
-    { key: 'upcoming', label: 'Upcoming', count: counts.upcoming },
-    { key: 'past', label: 'Past', count: counts.past },
-    { key: 'all', label: 'All', count: counts.all },
-  ];
+  const removeRequest = async (id: string) => {
+    if (!window.confirm('Delete this coaching request?')) return;
+    await deleteUserCoachingSession(id);
+    await load();
+  };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
-      <PageHeader
-        title="Coaching"
-        description="Book one-on-one sessions with experienced real estate advisors."
-      />
+    <div className="mx-auto max-w-[1200px] space-y-6">
+      <div>
+        <div className="inline-flex items-center gap-2 rounded-full bg-[#dbe7ff] px-3 py-1 text-[10px] font-bold tracking-[0.14em] text-[#1639a8] uppercase">
+          Advisors · Requests
+        </div>
+        <h1 className="mt-3 font-display text-3xl font-bold tracking-tight text-[#0b1220] sm:text-4xl">
+          Coaching
+        </h1>
+        <p className="mt-1.5 max-w-2xl text-sm text-[var(--muted)]">
+          Request a session with an expert listed by PropIntel admin. Your preferred time goes to
+          the admin queue — they confirm and coordinate the call (no Google Meet required).
+        </p>
+      </div>
 
-      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
-        {/* Booking form */}
-        <div className="lg:col-span-5 lg:sticky lg:top-4">
-          <div className="space-y-6 rounded-2xl border border-[var(--border)] bg-white p-6 shadow-[0_1px_0_rgba(15,23,42,0.04)]">
-            <h2 className="flex items-center gap-2 text-base font-bold text-foreground">
-              <Sparkles className="h-5 w-5 text-teal-700" /> Schedule a strategy call
-            </h2>
+      {notice && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          {notice}
+        </div>
+      )}
+      {error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
-            {!meetConfigured && (
-              <div className="flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-50 px-3.5 py-3 text-xs text-amber-900">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  Google Meet credentials are not set. Sessions will still book; add{' '}
-                  <code className="font-mono text-[10px]">GOOGLE_CLIENT_ID</code>,{' '}
-                  <code className="font-mono text-[10px]">GOOGLE_CLIENT_SECRET</code>, and{' '}
-                  <code className="font-mono text-[10px]">GOOGLE_REFRESH_TOKEN</code> in{' '}
-                  <code className="font-mono text-[10px]">.env</code> for live Meet links.
-                </span>
-              </div>
-            )}
-
-            <AnimatePresence>
-              {formNotice && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  className={`flex items-start gap-2 rounded-xl border p-3.5 text-xs ${
-                    formNotice.type === 'success'
-                      ? 'border-teal-700/20 bg-teal-700/10 text-teal-800'
-                      : formNotice.type === 'warn'
-                        ? 'border-amber-500/25 bg-amber-50 text-amber-900'
-                        : 'border-red-200 bg-red-50 text-red-700'
-                  }`}
-                >
-                  {formNotice.type === 'success' ? (
-                    <Check className="mt-0.5 h-4 w-4 shrink-0" />
-                  ) : (
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  )}
-                  <span>{formNotice.text}</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <form onSubmit={handleCreateBooking} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase">
-                  Choose advisor
-                </label>
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                  {COACHES.map((coach) => {
-                    const active = selectedCoach === coach.name;
+      <div className="grid gap-4 lg:grid-cols-5">
+        {/* Request form */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="overflow-hidden rounded-3xl border border-[var(--border)] bg-white lg:col-span-2"
+        >
+          <div className="border-b border-[var(--border)] bg-[linear-gradient(180deg,#f8fafc,white)] px-5 py-4">
+            <h2 className="font-display text-lg font-bold">Request a session</h2>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">
+              Pick expert · topic · preferred date/time
+            </p>
+          </div>
+          <div className="space-y-4 p-5">
+            <div>
+              <p className="mb-2 text-[10px] font-bold tracking-[0.12em] text-[var(--muted)] uppercase">
+                Choose expert
+              </p>
+              {isLoading ? (
+                <SkeletonRows rows={3} cols={1} />
+              ) : experts.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-[var(--border)] px-4 py-8 text-center text-sm text-[var(--muted)]">
+                  No experts published yet. An admin needs to add experts first.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {experts.map((e) => {
+                    const active = selectedExpertId === e.id;
                     return (
                       <button
-                        key={coach.name}
+                        key={e.id}
                         type="button"
-                        onClick={() => setSelectedCoach(coach.name)}
-                        className={`flex h-[5.5rem] cursor-pointer flex-col justify-between rounded-xl border p-3 text-left transition ${
+                        onClick={() => setSelectedExpertId(e.id)}
+                        className={`flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition ${
                           active
-                            ? 'border-teal-700 bg-teal-700/5 text-foreground ring-1 ring-teal-700/20'
-                            : 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--muted)] hover:border-teal-700/30'
+                            ? 'border-blue-700/50 bg-[#eff4ff] ring-1 ring-blue-700/20'
+                            : 'border-[var(--border)] hover:border-blue-700/25'
                         }`}
                       >
-                        <div
-                          className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold ${
-                            active ? 'bg-teal-700 text-white' : 'bg-white text-teal-800'
-                          }`}
-                        >
-                          {coach.avatar}
-                        </div>
-                        <div>
-                          <div className="truncate text-[11px] font-bold text-foreground">
-                            {coach.name}
-                          </div>
-                          <div className="mt-0.5 truncate text-[9px] text-[var(--muted-foreground)]">
-                            {coach.specialty}
-                          </div>
-                        </div>
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1d4ed8] text-sm font-bold text-white">
+                          {coachInitial(e.name, e.avatarInitial)}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-[#0b1220]">
+                            {e.name}
+                          </span>
+                          <span className="block text-xs text-[var(--muted)]">
+                            {e.specialty || 'Real estate advisor'}
+                          </span>
+                          {e.bio ? (
+                            <span className="mt-1 line-clamp-2 block text-[11px] text-[var(--muted)]">
+                              {e.bio}
+                            </span>
+                          ) : null}
+                        </span>
+                        {active ? (
+                          <Check className="mt-1 h-4 w-4 shrink-0 text-blue-800" />
+                        ) : null}
                       </button>
                     );
                   })}
                 </div>
-              </div>
+              )}
+            </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase">
-                  Topic
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={bookingTopic}
-                  onChange={(e) => setBookingTopic(e.target.value)}
-                  className="glass-input w-full px-3.5 py-2.5 text-sm"
-                  placeholder="What do you want to cover?"
-                />
-              </div>
+            <label className="block space-y-1.5">
+              <span className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase">
+                Topic
+              </span>
+              <input
+                value={bookingTopic}
+                onChange={(e) => setBookingTopic(e.target.value)}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-none focus:border-blue-700/40 focus:ring-2 focus:ring-blue-700/10"
+                placeholder="What do you want to cover?"
+              />
+            </label>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase">
-                    Date
-                  </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1.5">
+                <span className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase">
+                  Preferred date
+                </span>
+                <div className="relative">
+                  <CalendarIcon className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
                   <input
                     type="date"
-                    required
-                    min={formatDateInput(new Date())}
+                    min={tomorrowInput()}
                     value={bookingDate}
                     onChange={(e) => setBookingDate(e.target.value)}
-                    className="glass-input w-full px-3 py-2.5 text-sm"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] py-2.5 pr-3 pl-10 text-sm"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase">
-                    Time
-                  </label>
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase">
+                  Preferred time
+                </span>
+                <div className="relative">
+                  <Clock className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
                   <select
                     value={bookingTime}
                     onChange={(e) => setBookingTime(e.target.value)}
-                    className="glass-input w-full bg-white px-3 py-2.5 text-sm text-foreground"
+                    className="w-full appearance-none rounded-xl border border-[var(--border)] bg-[var(--surface)] py-2.5 pr-3 pl-10 text-sm"
                   >
-                    {TIME_SLOTS.map((slot) => (
-                      <option key={slot} value={slot}>
-                        {slot} EST
+                    {TIME_SLOTS.map((t) => (
+                      <option key={t} value={t}>
+                        {t} EST
                       </option>
                     ))}
                   </select>
                 </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isBooking}
-                className="btn-primary flex w-full cursor-pointer items-center justify-center gap-2 py-3.5 text-xs disabled:opacity-50"
-              >
-                {isBooking ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CalendarIcon className="h-4 w-4" />
-                )}
-                {isBooking ? 'Booking…' : 'Schedule session'}
-              </button>
-            </form>
-          </div>
-        </div>
-
-        {/* Sessions panel */}
-        <div className="lg:col-span-7">
-          <SpotlightCard className="overflow-hidden p-0">
-            <div className="border-b border-[var(--border)] px-5 pt-5 pb-4">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-foreground">Your sessions</h3>
-                  <p className="mt-0.5 text-xs text-[var(--muted)]">
-                    {counts.all} total · {counts.upcoming} upcoming
-                  </p>
-                </div>
-                <div className="relative w-full sm:max-w-[220px]">
-                  <Search className="pointer-events-none absolute top-2.5 left-3 h-3.5 w-3.5 text-[var(--muted)]" />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search topic or coach…"
-                    className="glass-input w-full py-2 pr-3 pl-9 text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 flex gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-1">
-                {filterTabs.map((tab) => {
-                  const active = filter === tab.key;
-                  return (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      onClick={() => setFilter(tab.key)}
-                      className={`relative flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                        active
-                          ? 'bg-white text-foreground shadow-sm'
-                          : 'text-[var(--muted)] hover:text-foreground'
-                      }`}
-                    >
-                      {tab.label}
-                      <span
-                        className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
-                          active ? 'bg-teal-700/10 text-teal-800' : 'bg-[var(--surface-soft)] text-[var(--muted)]'
-                        }`}
-                      >
-                        {tab.count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              </label>
             </div>
 
-            <div className="max-h-[min(62vh,560px)] overflow-y-auto overscroll-contain px-3 py-3 sm:px-4">
-              {isLoading ? (
-                <div className="space-y-3 py-2">
-                  <SkeletonRows rows={5} cols={2} />
-                </div>
-              ) : filteredBookings.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[var(--border)] px-6 py-14 text-center">
-                  <CalendarIcon className="mx-auto h-8 w-8 text-teal-700/40" />
-                  <p className="mt-3 text-sm font-semibold text-foreground">No sessions here</p>
-                  <p className="mt-1 text-xs text-[var(--muted)]">
-                    {filter === 'upcoming'
-                      ? 'Book a call on the left to fill your upcoming schedule.'
-                      : 'Try another filter or clear your search.'}
-                  </p>
-                </div>
+            <button
+              type="button"
+              disabled={isBooking || !experts.length}
+              onClick={handleCreateBooking}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d4ed8] px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#1e40af] disabled:opacity-50"
+            >
+              {isBooking ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <ul className="space-y-2">
-                  <AnimatePresence mode="popLayout">
-                    {filteredBookings.map((b) => (
-                      <motion.li
-                        key={b.id}
-                        layout
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.98 }}
-                        transition={{ duration: 0.18 }}
-                        className="group rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3.5 transition hover:border-teal-700/25 hover:bg-white"
-                      >
-                        <div className="flex gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-700/10 text-sm font-bold text-teal-800">
-                            {coachInitial(b.coach)}
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <h4 className="truncate text-sm font-bold text-foreground">
-                                    {b.topic}
-                                  </h4>
-                                  <span
-                                    className={`rounded-md px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide uppercase ${statusStyles(b.status)}`}
-                                  >
-                                    {b.status}
-                                  </span>
-                                </div>
-                                <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
-                                  with {b.coach}
-                                </p>
-                              </div>
-
-                              <div className="flex shrink-0 items-center gap-1 opacity-100 sm:opacity-0 sm:transition sm:group-hover:opacity-100 sm:focus-within:opacity-100">
-                                <button
-                                  type="button"
-                                  onClick={() => openEdit(b)}
-                                  className="cursor-pointer rounded-lg border border-[var(--border)] bg-white p-2 text-teal-800 transition hover:border-teal-700/30"
-                                  aria-label="Edit session"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </button>
-                                {confirmDeleteId === b.id ? (
-                                  <button
-                                    type="button"
-                                    disabled={deletingId === b.id}
-                                    onClick={() => handleDelete(b.id)}
-                                    className="cursor-pointer rounded-lg bg-red-600 px-3 py-2 text-[10px] font-bold text-white disabled:opacity-50"
-                                  >
-                                    {deletingId === b.id ? '…' : 'Confirm'}
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => setConfirmDeleteId(b.id)}
-                                    className="cursor-pointer rounded-lg border border-[var(--border)] bg-white p-2 text-red-600 transition hover:border-red-200 hover:bg-red-50"
-                                    aria-label="Delete session"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[var(--muted)]">
-                              <span className="inline-flex items-center gap-1.5">
-                                <CalendarIcon className="h-3.5 w-3.5 text-teal-700" />
-                                {b.bookingDate.toLocaleDateString('en-US', {
-                                  weekday: 'short',
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric',
-                                })}
-                              </span>
-                              <span className="inline-flex items-center gap-1.5">
-                                <Clock className="h-3.5 w-3.5 text-teal-700" />
-                                {b.time} EST
-                              </span>
-                              {canJoinSession(b) ? (
-                                <a
-                                  href={b.meetingLink!}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1.5 font-semibold text-teal-800 transition hover:underline"
-                                >
-                                  <Video className="h-3.5 w-3.5" />
-                                  Join Meet
-                                  <ExternalLink className="h-3 w-3 opacity-60" />
-                                </a>
-                              ) : b.status.toUpperCase() === 'EXPIRED' ? (
-                                <span className="inline-flex items-center gap-1.5 font-semibold text-orange-700">
-                                  Session expired
-                                </span>
-                              ) : b.meetingLink ? (
-                                <span className="inline-flex items-center gap-1.5 text-[var(--muted)]">
-                                  Meet unavailable
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1.5 text-amber-800">
-                                  Meet link pending
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </motion.li>
-                    ))}
-                  </AnimatePresence>
-                </ul>
+                <Send className="h-4 w-4" />
               )}
+              Submit request
+            </button>
+            <p className="text-center text-[11px] text-[var(--muted)]">
+              Status starts as <span className="font-semibold text-amber-800">Pending</span> until
+              admin confirms.
+            </p>
+          </div>
+        </motion.section>
+
+        {/* Sessions list */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="overflow-hidden rounded-3xl border border-[var(--border)] bg-white lg:col-span-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[linear-gradient(180deg,#f8fafc,white)] px-5 py-4">
+            <div>
+              <h2 className="font-display text-lg font-bold">Your requests</h2>
+              <p className="text-xs text-[var(--muted)]">
+                {stats.total} total · {stats.upcoming} upcoming · {stats.pending} pending
+              </p>
             </div>
-          </SpotlightCard>
-        </div>
+            <div className="relative min-w-[180px] flex-1 sm:max-w-xs">
+              <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search topic or coach…"
+                className="w-full rounded-xl border border-[var(--border)] bg-white py-2 pr-3 pl-9 text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-1 border-b border-[var(--border)] px-4 py-2">
+            {(['upcoming', 'past', 'all'] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setFilter(f)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize ${
+                  filter === f
+                    ? 'bg-[#0b1220] text-white'
+                    : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+
+          <div className="max-h-[560px] space-y-2 overflow-y-auto p-4">
+            {isLoading ? (
+              <SkeletonRows rows={4} cols={1} />
+            ) : filteredBookings.length === 0 ? (
+              <div className="flex flex-col items-center px-4 py-14 text-center">
+                <Inbox className="mb-3 h-8 w-8 text-blue-800/40" />
+                <p className="text-sm font-semibold text-[#0b1220]">No sessions here</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Submit a request on the left to get started.
+                </p>
+              </div>
+            ) : (
+              filteredBookings.map((b) => (
+                <div
+                  key={b.id}
+                  className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)]/40 p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eff4ff] text-sm font-bold text-blue-800">
+                        {coachInitial(b.coach)}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[#0b1220]">{b.topic}</p>
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-[var(--muted)]">
+                          <UserRound className="h-3 w-3" /> {b.coach}
+                        </p>
+                        <p className="mt-1 text-xs text-[var(--muted)]">
+                          {b.bookingDate.toLocaleString('en-US', {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                        {b.notes && b.status === 'CONFIRMED' ? (
+                          <p className="mt-2 rounded-lg bg-white px-2 py-1.5 text-[11px] text-[var(--muted)]">
+                            Admin note: {b.notes}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ring-1 ring-inset ${statusStyles(b.status)}`}
+                    >
+                      {b.status}
+                    </span>
+                  </div>
+                  {!isInactiveStatus(b.status) ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(b)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-white px-2.5 py-1.5 text-[11px] font-semibold"
+                      >
+                        <Pencil className="h-3 w-3" /> Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => cancelRequest(b.id)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-amber-900"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeRequest(b.id)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-red-700"
+                      >
+                        <Trash2 className="h-3 w-3" /> Delete
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ))
+            )}
+          </div>
+        </motion.section>
       </div>
 
-      {/* Edit modal */}
       <AnimatePresence>
         {editing && (
           <motion.div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-md sm:p-6"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setEditing(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b1220]/40 p-4 backdrop-blur-sm"
           >
             <motion.div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="edit-session-title"
-              className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-2xl"
-              initial={{ opacity: 0, y: 16, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.98 }}
-              transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-              onClick={(e) => e.stopPropagation()}
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-white p-5 shadow-xl"
             >
-              <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
-                <h3 id="edit-session-title" className="text-sm font-bold">
-                  Edit session
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setEditing(null)}
-                  className="cursor-pointer rounded-lg border border-[var(--border)] p-1.5"
-                  aria-label="Close"
-                >
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="font-display text-lg font-bold">Edit request</h3>
+                <button type="button" onClick={() => setEditing(null)} className="rounded-lg p-1 hover:bg-[var(--surface-soft)]">
                   <X className="h-4 w-4" />
                 </button>
               </div>
-
-              <form onSubmit={handleSaveEdit} className="space-y-4 p-5">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase">
-                    Advisor
-                  </label>
+              <div className="space-y-3">
+                <label className="block space-y-1 text-xs font-semibold">
+                  Expert
                   <select
-                    value={editCoach}
-                    onChange={(e) => setEditCoach(e.target.value)}
-                    className="glass-input w-full bg-white px-3 py-2.5 text-sm"
+                    value={editExpertId}
+                    onChange={(e) => setEditExpertId(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm"
                   >
-                    {COACHES.map((c) => (
-                      <option key={c.name} value={c.name}>
-                        {c.name}
+                    {experts.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name}
                       </option>
                     ))}
-                    {!COACHES.some((c) => c.name === editCoach) && (
-                      <option value={editCoach}>{editCoach}</option>
-                    )}
                   </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase">
-                    Topic
-                  </label>
+                </label>
+                <label className="block space-y-1 text-xs font-semibold">
+                  Topic
                   <input
-                    required
                     value={editTopic}
                     onChange={(e) => setEditTopic(e.target.value)}
-                    className="glass-input w-full px-3.5 py-2.5 text-sm"
+                    className="mt-1 w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm"
                   />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase">
-                      Date
-                    </label>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block space-y-1 text-xs font-semibold">
+                    Date
                     <input
                       type="date"
-                      required
                       value={editDate}
                       onChange={(e) => setEditDate(e.target.value)}
-                      className="glass-input w-full px-3 py-2.5 text-sm"
+                      className="mt-1 w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm"
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase">
-                      Time
-                    </label>
+                  </label>
+                  <label className="block space-y-1 text-xs font-semibold">
+                    Time
                     <select
                       value={editTime}
                       onChange={(e) => setEditTime(e.target.value)}
-                      className="glass-input w-full bg-white px-3 py-2.5 text-sm"
+                      className="mt-1 w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm"
                     >
-                      {TIME_SLOTS.map((slot) => (
-                        <option key={slot} value={slot}>
-                          {slot} EST
+                      {TIME_SLOTS.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
                         </option>
                       ))}
                     </select>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold tracking-wider text-[var(--muted)] uppercase">
-                    Status
                   </label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value)}
-                    className="glass-input w-full bg-white px-3 py-2.5 text-sm"
-                  >
-                    <option value="PENDING">Pending</option>
-                    <option value="CONFIRMED">Confirmed</option>
-                    <option value="COMPLETED">Completed</option>
-                    <option value="EXPIRED">Expired</option>
-                    <option value="CANCELED">Canceled</option>
-                  </select>
                 </div>
-
-                <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-between">
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(editing.id)}
-                    disabled={deletingId === editing.id}
-                    className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
-                  >
-                    {deletingId === editing.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-3.5 w-3.5" />
-                    )}
-                    Delete session
-                  </button>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditing(null)}
-                      className="cursor-pointer rounded-xl border border-[var(--border)] px-4 py-2.5 text-xs font-semibold text-[var(--muted)]"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSavingEdit}
-                      className="btn-primary inline-flex cursor-pointer items-center gap-2 px-4 py-2.5 text-xs disabled:opacity-50"
-                    >
-                      {isSavingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                      Save changes
-                    </button>
-                  </div>
-                </div>
-              </form>
+                <p className="text-[11px] text-[var(--muted)]">
+                  Changing time after confirmation sets status back to Pending for admin review.
+                </p>
+                <button
+                  type="button"
+                  disabled={savingEdit}
+                  onClick={saveEdit}
+                  className="w-full rounded-xl bg-[#1d4ed8] py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {savingEdit ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : 'Save changes'}
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}

@@ -25,10 +25,13 @@ import {
   toggleFavoriteAnalysis,
   archiveAnalysis,
   duplicateAnalysis,
+  updateAnalysisPipelineStatus,
 } from '@/app/actions/analysisActions';
 import { exportToPDF } from '@/lib/services/reports';
 import { createReportAction } from '@/app/actions/reportActions';
 import Link from 'next/link';
+import { PipelineStatusSelect } from '@/components/dashboard/PipelineStatusSelect';
+import type { PipelineStatus } from '@/lib/pipelineStatus';
 
 interface SavedDeal {
   id: string;
@@ -61,6 +64,7 @@ interface SavedDeal {
   aiHeadline: string | null;
   isFavorite: boolean;
   isArchived: boolean;
+  pipelineStatus: string;
   aiPayload: {
     summary?: Array<{ label: string; value: string }>;
     strengths?: Array<{ title: string; detail: string }>;
@@ -133,6 +137,7 @@ export default function SavedDealsPage() {
         aiHeadline: a.aiHeadline,
         isFavorite: a.isFavorite,
         isArchived: a.isArchived,
+        pipelineStatus: a.pipelineStatus || 'UNDER_REVIEW',
         aiPayload: parseAiPayload(a.aiPayloadJson),
         createdAt: new Date(a.createdAt).toISOString(),
       }));
@@ -165,6 +170,7 @@ export default function SavedDealsPage() {
         aiHeadline: a.aiHeadline,
         isFavorite: a.isFavorite,
         isArchived: a.isArchived,
+        pipelineStatus: a.pipelineStatus || 'UNDER_REVIEW',
         aiPayload: parseAiPayload(a.aiPayloadJson),
         createdAt: new Date(a.createdAt).toISOString(),
       }));
@@ -314,16 +320,18 @@ export default function SavedDealsPage() {
                 financingCost: null,
                 holdingCost: null,
                 sellingCost: null,
-                vacancyRate: (copy as { vacancyRate?: number | null }).vacancyRate ?? null,
-                maintenanceRate: (copy as { maintenanceRate?: number | null }).maintenanceRate ?? null,
-                mortgageRate: (copy as { mortgageRate?: number | null }).mortgageRate ?? null,
-                mortgageTerm: (copy as { mortgageTerm?: number | null }).mortgageTerm ?? null,
-                aiVerdict: copy.aiVerdict,
-                aiHeadline: copy.aiHeadline,
+                vacancyRate: (copy as { vacancyRate?: number }).vacancyRate ?? null,
+                maintenanceRate: (copy as { maintenanceRate?: number }).maintenanceRate ?? null,
+                mortgageRate: (copy as { mortgageRate?: number }).mortgageRate ?? null,
+                mortgageTerm: (copy as { mortgageTerm?: number }).mortgageTerm ?? null,
+                aiVerdict: (copy as { aiVerdict?: string | null }).aiVerdict ?? null,
+                aiHeadline: (copy as { aiHeadline?: string | null }).aiHeadline ?? null,
                 isFavorite: false,
                 isArchived: false,
-                aiPayload: parseAiPayload(copy.aiPayloadJson),
-                createdAt: new Date(copy.createdAt).toISOString(),
+                pipelineStatus:
+                  (copy as { pipelineStatus?: string }).pipelineStatus || 'UNDER_REVIEW',
+                aiPayload: parseAiPayload((copy as { aiPayloadJson?: string | null }).aiPayloadJson),
+                createdAt: new Date().toISOString(),
               }
             : {
                 id: copy.id,
@@ -336,25 +344,27 @@ export default function SavedDealsPage() {
                 rent: 0,
                 downPayment: 0,
                 cashFlow: 0,
-                roi: copy.roi ?? 0,
+                roi: (copy as { roi?: number | null }).roi ?? 0,
                 capRate: 0,
                 dscr: 0,
                 cashOnCash: 0,
-                profit: copy.profit ?? null,
-                mao: copy.mao ?? null,
-                financingCost: copy.financingCost ?? null,
-                holdingCost: copy.holdingCost ?? null,
-                sellingCost: copy.sellingCost ?? null,
+                profit: (copy as { profit?: number | null }).profit ?? null,
+                mao: (copy as { mao?: number | null }).mao ?? null,
+                financingCost: (copy as { financingCost?: number | null }).financingCost ?? null,
+                holdingCost: (copy as { holdingCost?: number | null }).holdingCost ?? null,
+                sellingCost: (copy as { sellingCost?: number | null }).sellingCost ?? null,
                 vacancyRate: null,
                 maintenanceRate: null,
                 mortgageRate: null,
                 mortgageTerm: null,
-                aiVerdict: copy.aiVerdict,
-                aiHeadline: copy.aiHeadline,
+                aiVerdict: (copy as { aiVerdict?: string | null }).aiVerdict ?? null,
+                aiHeadline: (copy as { aiHeadline?: string | null }).aiHeadline ?? null,
                 isFavorite: false,
                 isArchived: false,
-                aiPayload: parseAiPayload(copy.aiPayloadJson),
-                createdAt: new Date(copy.createdAt).toISOString(),
+                pipelineStatus:
+                  (copy as { pipelineStatus?: string }).pipelineStatus || 'UNDER_REVIEW',
+                aiPayload: parseAiPayload((copy as { aiPayloadJson?: string | null }).aiPayloadJson),
+                createdAt: new Date().toISOString(),
               };
         setDeals((list) => [mapped, ...list]);
       }
@@ -461,7 +471,7 @@ export default function SavedDealsPage() {
             onClick={() => setTab(t.id)}
             className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
               tab === t.id
-                ? 'bg-teal-800 text-white'
+                ? 'bg-blue-800 text-white'
                 : 'border border-[var(--border)] text-[var(--muted)] hover:text-foreground'
             }`}
           >
@@ -512,7 +522,7 @@ export default function SavedDealsPage() {
               <SpotlightCard
                 key={deal.id}
                 className={`p-5 transition-shadow hover:shadow-[var(--shadow-lift)] ${
-                  isChecked ? 'border-teal-700/35 bg-teal-700/[0.04]' : ''
+                  isChecked ? 'border-blue-700/35 bg-blue-700/[0.04]' : ''
                 }`}
               >
                 <div
@@ -525,7 +535,7 @@ export default function SavedDealsPage() {
                       setActiveDeal(deal);
                     }
                   }}
-                  className="flex cursor-pointer flex-col gap-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-teal-700/30"
+                  className="flex cursor-pointer flex-col gap-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-blue-700/30"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-2">
@@ -534,13 +544,34 @@ export default function SavedDealsPage() {
                           {deal.type}
                         </span>
                         {deal.aiVerdict && (
-                          <span className="inline-flex rounded-md bg-teal-700/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-teal-800 uppercase">
+                          <span className="inline-flex rounded-md bg-blue-700/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-blue-800 uppercase">
                             {deal.aiVerdict}
                           </span>
                         )}
+                        <PipelineStatusSelect
+                          compact
+                          value={deal.pipelineStatus || 'UNDER_REVIEW'}
+                          onChange={async (next: PipelineStatus) => {
+                            const res = await updateAnalysisPipelineStatus(
+                              deal.id,
+                              deal.analysisType,
+                              next
+                            );
+                            if (!res.success) {
+                              toast.error(res.error || 'Could not update status');
+                              return;
+                            }
+                            setDeals((list) =>
+                              list.map((d) =>
+                                d.id === deal.id ? { ...d, pipelineStatus: next } : d
+                              )
+                            );
+                            toast.success('Status updated', 'CRM pipeline moved too');
+                          }}
+                        />
                       </div>
                       <h3 className="flex items-start gap-1.5 text-sm leading-snug font-bold text-foreground">
-                        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-700" />
+                        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-700" />
                         <span className="line-clamp-2">{deal.address}</span>
                       </h3>
                     </div>
@@ -648,7 +679,7 @@ export default function SavedDealsPage() {
                       <div className="text-[9px] font-bold uppercase tracking-wider text-[var(--muted)]">
                         {deal.analysisType === 'FLIP' ? 'ROI' : 'CoC'}
                       </div>
-                      <div className="mt-1 text-xs font-extrabold text-teal-800">
+                      <div className="mt-1 text-xs font-extrabold text-blue-800">
                         {(deal.analysisType === 'FLIP' ? deal.roi : deal.cashOnCash || deal.roi).toFixed(1)}%
                       </div>
                     </div>
@@ -703,14 +734,14 @@ export default function SavedDealsPage() {
                         type="checkbox"
                         checked={isChecked}
                         onChange={() => handleSelectDeal(deal.id)}
-                        className="h-4 w-4 rounded border-[var(--border)] accent-teal-700"
+                        className="h-4 w-4 rounded border-[var(--border)] accent-blue-700"
                       />
                       <span className="text-xs text-[var(--muted)]">Compare</span>
                     </label>
                     <Link
                       href={`/dashboard/deals/${deal.id}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-800 hover:underline"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-800 hover:underline"
                     >
                       <Eye className="h-3.5 w-3.5" /> Open deal
                     </Link>
@@ -736,7 +767,7 @@ export default function SavedDealsPage() {
           >
             <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-[var(--border)] bg-white/95 px-5 py-4 backdrop-blur sm:px-8">
               <div className="min-w-0 space-y-1">
-                <span className="inline-flex rounded-md bg-teal-700/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-teal-800 uppercase">
+                <span className="inline-flex rounded-md bg-blue-700/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-blue-800 uppercase">
                   {activeDeal.type}
                 </span>
                 <h3 id="deal-detail-title" className="text-base font-bold leading-snug text-foreground sm:text-lg">
@@ -879,9 +910,9 @@ export default function SavedDealsPage() {
                   <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
                     AI verdict
                   </h4>
-                  <div className="space-y-3 rounded-xl border border-teal-700/20 bg-teal-700/5 p-4 sm:p-5">
+                  <div className="space-y-3 rounded-xl border border-blue-700/20 bg-blue-700/5 p-4 sm:p-5">
                     {activeDeal.aiVerdict && (
-                      <div className="text-sm font-extrabold text-teal-900 sm:text-base">
+                      <div className="text-sm font-extrabold text-blue-900 sm:text-base">
                         {activeDeal.aiVerdict}
                       </div>
                     )}
@@ -892,7 +923,7 @@ export default function SavedDealsPage() {
                     )}
                     {activeDeal.aiPayload?.strengths && activeDeal.aiPayload.strengths.length > 0 && (
                       <div>
-                        <div className="mb-1 text-[10px] font-bold uppercase text-teal-800">
+                        <div className="mb-1 text-[10px] font-bold uppercase text-blue-800">
                           Strengths
                         </div>
                         <ul className="space-y-1.5 text-xs text-[var(--muted)] sm:text-[13px]">
@@ -958,12 +989,12 @@ export default function SavedDealsPage() {
           >
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-4">
               <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
-                <ArrowRightLeft className="h-5 w-5 text-teal-800" /> Compare deals
+                <ArrowRightLeft className="h-5 w-5 text-blue-800" /> Compare deals
               </h3>
               <button
                 type="button"
                 onClick={() => setShowComparison(false)}
-                className="cursor-pointer rounded-lg bg-[var(--surface-soft)] p-1.5 text-[var(--muted)] transition-all hover:bg-white hover:text-foreground"
+                className="cursor-pointer rounded-lg bg-[var(--surface-soft)] p-1.5 text-[var(--muted)] transition-all hover:bg-[var(--surface)] hover:text-foreground"
                 aria-label="Close"
               >
                 <X className="h-4 w-4" />
@@ -1052,7 +1083,7 @@ function DetailStat({
         {label}
       </div>
       <div
-        className={`mt-0.5 text-sm font-bold ${emphasize ? 'text-teal-800' : 'text-foreground'}`}
+        className={`mt-0.5 text-sm font-bold ${emphasize ? 'text-blue-800' : 'text-foreground'}`}
       >
         {value}
       </div>
@@ -1075,7 +1106,7 @@ function CompareRow({
       {values.map((v, i) => (
         <td
           key={`${label}-${i}`}
-          className={`px-4 py-3 font-semibold ${emphasize ? 'text-teal-800' : 'text-foreground'}`}
+          className={`px-4 py-3 font-semibold ${emphasize ? 'text-blue-800' : 'text-foreground'}`}
         >
           {v}
         </td>

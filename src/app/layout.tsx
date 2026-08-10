@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
-import { Syne, Outfit, Geist_Mono } from 'next/font/google';
+import { Sora, Outfit, Geist_Mono, Playfair_Display } from 'next/font/google';
 import { ClerkProvider } from '@clerk/nextjs';
 import Providers from './providers';
 import { clerkAppearance } from '@/lib/clerkAppearance';
 import './globals.css';
 
-const display = Syne({
+const display = Sora({
   variable: '--font-display',
   subsets: ['latin'],
   weight: ['500', '600', '700', '800'],
@@ -17,10 +17,19 @@ const body = Outfit({
   weight: ['300', '400', '500', '600', '700'],
 });
 
+const serif = Playfair_Display({
+  variable: '--font-serif',
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  style: ['normal', 'italic'],
+});
+
 const geistMono = Geist_Mono({
   variable: '--font-geist-mono',
   subsets: ['latin'],
 });
+
+const themeInitScript = `(function(){try{var t=localStorage.getItem('propintel-theme');var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d){document.documentElement.classList.add('dark');document.documentElement.dataset.theme='dark';document.documentElement.style.colorScheme='dark';}else{document.documentElement.dataset.theme='light';document.documentElement.style.colorScheme='light';}}catch(e){}})();`;
 
 export const metadata: Metadata = {
   title: {
@@ -49,8 +58,15 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${display.variable} ${body.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${display.variable} ${body.variable} ${serif.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        <script
+          id="propintel-theme-init"
+          dangerouslySetInnerHTML={{ __html: themeInitScript }}
+        />
+      </head>
       <body
         className="flex min-h-full flex-col font-sans text-foreground"
         suppressHydrationWarning
@@ -62,6 +78,8 @@ export default function RootLayout({
           afterSignOutUrl="/login"
           signInUrl="/login"
           signUpUrl="/login?tab=register"
+          signInFallbackRedirectUrl="/dashboard"
+          signUpFallbackRedirectUrl="/dashboard"
           appearance={clerkAppearance}
         >
           <Providers>{children}</Providers>

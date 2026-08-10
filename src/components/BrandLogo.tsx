@@ -8,7 +8,7 @@ type BrandMarkProps = {
   variant?: 'svg' | 'png';
 };
 
-/** PropIntel building mark (teal tile + brass accent). */
+/** PropIntel mark — cobalt house + signal bars. */
 export function BrandMark({ size = 32, className = '', variant = 'svg' }: BrandMarkProps) {
   if (variant === 'png') {
     return (
@@ -48,7 +48,7 @@ export function BrandLogo({ className = '', markSize = 36, showWordmark = true }
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
       <BrandMark size={markSize} />
       {showWordmark ? (
-        <span className="font-display text-2xl tracking-tight text-foreground sm:text-3xl">
+        <span className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
           PropIntel
         </span>
       ) : null}

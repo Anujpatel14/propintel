@@ -86,7 +86,7 @@ export default function PropertyExploreDetailPage() {
           address: p.address,
           zip: p.zip || '',
           from: 'property',
-          propertyId: p.id,
+          propertyId: res.propertyId || '',
           value: String(p.estimatedValue ?? ''),
           rent: String(p.estimatedRent ?? ''),
           mode: 'hold',
@@ -110,7 +110,7 @@ export default function PropertyExploreDetailPage() {
       <div className="space-y-6">
         <PageHeader title="Property details" />
         <p className="text-sm text-[var(--muted)]">{error || 'Not found'}</p>
-        <Link href="/dashboard/explore" className="text-sm text-teal-800 underline">
+        <Link href="/dashboard/explore" className="text-sm text-blue-800 underline">
           Back to explorer
         </Link>
       </div>
@@ -143,7 +143,7 @@ export default function PropertyExploreDetailPage() {
               type="button"
               disabled={busy}
               onClick={() => void handleImport(false)}
-              className="inline-flex items-center gap-2 rounded-lg border border-teal-800/30 bg-teal-800/10 px-3 py-2 text-sm font-medium text-teal-900 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg border border-blue-800/30 bg-blue-800/10 px-3 py-2 text-sm font-medium text-blue-900 disabled:opacity-60"
             >
               {importMode === 'save' ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -156,7 +156,7 @@ export default function PropertyExploreDetailPage() {
               type="button"
               disabled={busy}
               onClick={() => void handleImport(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-teal-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
             >
               {importMode === 'analyze' ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -216,8 +216,8 @@ export default function PropertyExploreDetailPage() {
         </SpotlightCard>
 
         <SpotlightCard className="overflow-hidden p-0">
-          <div className="border-b border-[var(--border)] bg-gradient-to-br from-teal-900/[0.07] to-transparent px-5 py-4">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-teal-800/80">
+          <div className="border-b border-[var(--border)] bg-gradient-to-br from-white/[0.05] to-transparent px-5 py-4">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-blue-800/80">
               Financial summary
             </p>
             <p className="mt-1 font-display text-3xl tracking-tight text-foreground">

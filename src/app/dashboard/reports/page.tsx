@@ -206,7 +206,7 @@ export default function ReportsPage() {
       <p className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--muted)]">
         Each card is a <span className="font-medium text-foreground">report style</span>. It pulls
         your latest matching deal from{' '}
-        <Link href="/dashboard/deals" className="text-teal-800 underline">
+        <Link href="/dashboard/deals" className="text-blue-800 underline">
           Deals
         </Link>
         , downloads a real PDF, and logs it in History.
@@ -219,7 +219,7 @@ export default function ReportsPage() {
             const busy = generatingType === t.type;
             return (
               <SpotlightCard key={t.type} className="flex flex-col p-5">
-                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-teal-900/10 text-teal-900">
+                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-blue-900/10 text-blue-900">
                   <FileText className="h-4 w-4" />
                 </div>
                 <h3 className="font-medium text-foreground">{t.title}</h3>
@@ -228,7 +228,7 @@ export default function ReportsPage() {
                   type="button"
                   disabled={!!generatingType}
                   onClick={() => void generate(t.type)}
-                  className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-teal-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                  className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-blue-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
                 >
                   {busy ? (
                     <Loader2 className="h-4 w-4 animate-spin" />

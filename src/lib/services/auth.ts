@@ -9,6 +9,7 @@ export interface UserSession {
   name: string;
   role: Role;
   clerkId: string;
+  status: string;
 }
 
 function isDbConnectivityError(error: unknown): boolean {
@@ -24,18 +25,35 @@ function isDbConnectivityError(error: unknown): boolean {
     message.includes('Database is temporarily unavailable') ||
     message.includes('Prisma client is outdated') ||
     message.includes('Unique constraint') ||
-    message.includes('P2002')
+    message.includes('P2002') ||
+    message.includes('Environment variable not found: DATABASE_URL') ||
+    message.includes('PrismaClientInitializationError') ||
+    message.includes('Can\'t reach database') ||
+    message.includes('datasource url')
   );
 }
 
 function resolveRole(email: string, existing?: Role | null): Role {
   if (existing === 'ADMIN') return 'ADMIN';
-  if (email.toLowerCase() === 'admin@propintel.com') return 'ADMIN';
+  const normalized = email.toLowerCase();
+  if (normalized === 'admin@propintel.com') return 'ADMIN';
+  const fromEnv = (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  if (fromEnv.includes(normalized)) return 'ADMIN';
   return existing || 'INVESTOR';
 }
 
 function toSession(
-  dbUser: { id: string; email: string; name: string | null; role: Role; clerkId: string | null },
+  dbUser: {
+    id: string;
+    email: string;
+    name: string | null;
+    role: Role;
+    clerkId: string | null;
+    status?: string | null;
+  },
   fallbackName: string,
   clerkId: string
 ): UserSession {
@@ -45,6 +63,7 @@ function toSession(
     name: dbUser.name || fallbackName,
     role: dbUser.role,
     clerkId: dbUser.clerkId || clerkId,
+    status: dbUser.status || 'ACTIVE',
   };
 }
 
@@ -99,7 +118,7 @@ export async function syncClerkUserToDb(
           data: {
             clerkId,
             name: name || dbUser.name || displayName,
-            status: 'ACTIVE',
+            // Preserve admin suspensions — do not force ACTIVE
             role: resolveRole(normalized, dbUser.role),
           },
         });
@@ -142,19 +161,18 @@ export async function syncClerkUserToDb(
         if (!dbUser.clerkId) {
           dbUser = await prisma.user.update({
             where: { id: dbUser.id },
-            data: { clerkId, status: 'ACTIVE' },
+            data: { clerkId },
           });
         }
       }
       return toSession(dbUser, displayName, clerkId);
     }
 
-    // Existing clerkId match — keep profile fresh
+    // Existing clerkId match — keep profile fresh (never wipe SUSPENDED)
     const role = resolveRole(normalized, dbUser.role);
     if (
       dbUser.role !== role ||
       (name && dbUser.name !== displayName) ||
-      dbUser.status !== 'ACTIVE' ||
       dbUser.email !== normalized
     ) {
       dbUser = await prisma.user.update({
@@ -162,7 +180,6 @@ export async function syncClerkUserToDb(
         data: {
           role,
           name: name || dbUser.name || displayName,
-          status: 'ACTIVE',
           email: normalized,
         },
       });
@@ -208,21 +225,44 @@ export async function getCurrentUser(): Promise<UserSession | null> {
 }
 
 /**
- * Like getCurrentUser, but distinguishes "no Clerk session" vs "sync failed".
+ * Like getCurrentUser, but distinguishes "no Clerk session" vs DB down vs sync failed.
  */
 export async function resolveAppUser(): Promise<
   | { status: 'anonymous' }
   | { status: 'ready'; user: UserSession }
+  | { status: 'suspended'; user: UserSession }
   | { status: 'sync_error'; clerkId: string }
+  | { status: 'db_unavailable'; clerkId: string }
 > {
   const clerkAuth = await auth();
   if (!clerkAuth?.userId) return { status: 'anonymous' };
 
   try {
-    const user = await getCurrentUser();
-    if (user) return { status: 'ready', user };
-    return { status: 'sync_error', clerkId: clerkAuth.userId };
-  } catch {
+    const user = await currentUser();
+    const email =
+      user?.primaryEmailAddress?.emailAddress ||
+      user?.emailAddresses?.[0]?.emailAddress;
+
+    if (!email) {
+      return { status: 'sync_error', clerkId: clerkAuth.userId };
+    }
+
+    const name =
+      `${user?.firstName || ''} ${user?.lastName || ''}`.trim() ||
+      user?.username ||
+      undefined;
+
+    const session = await syncClerkUserToDb(clerkAuth.userId, email, name);
+    if (session.status === 'SUSPENDED') {
+      return { status: 'suspended', user: session };
+    }
+    void maybeRecordLogin(session.id);
+    return { status: 'ready', user: session };
+  } catch (err) {
+    void logError('resolveAppUser failed', err, { category: 'AUTH' });
+    if (isDbConnectivityError(err)) {
+      return { status: 'db_unavailable', clerkId: clerkAuth.userId };
+    }
     return { status: 'sync_error', clerkId: clerkAuth.userId };
   }
 }
@@ -231,6 +271,9 @@ export async function requireAuth(): Promise<UserSession> {
   const user = await getCurrentUser();
   if (!user) {
     throw new Error('Unauthorized access. Please log in.');
+  }
+  if (user.status === 'SUSPENDED') {
+    throw new Error('Account suspended. Contact support.');
   }
   return user;
 }

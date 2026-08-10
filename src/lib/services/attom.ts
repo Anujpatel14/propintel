@@ -7,6 +7,10 @@ const ATTOM_BASE =
   process.env.ATTOM_API_BASE_URL?.replace(/\/$/, "") ||
   "https://api.gateway.attomdata.com/propertyapi/v1.0.0";
 
+const ATTOM_GATEWAY =
+  process.env.ATTOM_GATEWAY_BASE_URL?.replace(/\/$/, "") ||
+  "https://api.gateway.attomdata.com";
+
 export class AttomError extends Error {
   status: number;
   code?: string;
@@ -34,18 +38,11 @@ function buildQuery(params: AttomParams): string {
   return q.toString();
 }
 
-async function attomFetch<T = unknown>(
-  endpoint: string,
-  params: AttomParams = {}
-): Promise<T> {
+async function attomFetchUrl<T = unknown>(url: string): Promise<T> {
   const key = process.env.ATTOM_API_KEY?.trim();
   if (!key) {
     throw new AttomError("ATTOM_API_KEY is not configured", 503, "NOT_CONFIGURED");
   }
-
-  const path = endpoint.replace(/^\//, "");
-  const qs = buildQuery(params);
-  const url = `${ATTOM_BASE}/${path}${qs ? `?${qs}` : ""}`;
 
   const res = await fetch(url, {
     method: "GET",
@@ -53,7 +50,6 @@ async function attomFetch<T = unknown>(
       Accept: "application/json",
       apikey: key,
     },
-    // ATTOM data is shared across users; short cache at the edge/runtime is fine
     next: { revalidate: 0 },
     cache: "no-store",
   });
@@ -66,19 +62,30 @@ async function attomFetch<T = unknown>(
   }
 
   if (!res.ok) {
-    const msg =
+    const statusMsg =
       (body as { status?: { msg?: string } })?.status?.msg ||
       `ATTOM request failed (${res.status})`;
-    throw new AttomError(msg, res.status, "HTTP_ERROR");
-  }
-
-  const statusMsg = (body as { status?: { msg?: string; code?: number } })?.status
-    ?.msg;
-  if (statusMsg === "SuccessWithoutResult") {
-    return body as T;
+    // ATTOM often returns HTTP 400 with SuccessWithoutResult for empty geo searches
+    if (
+      res.status === 400 &&
+      /SuccessWithoutResult|no results|without result/i.test(statusMsg)
+    ) {
+      return (body ?? { status: { msg: statusMsg }, property: [] }) as T;
+    }
+    throw new AttomError(statusMsg, res.status, "HTTP_ERROR");
   }
 
   return body as T;
+}
+
+async function attomFetch<T = unknown>(
+  endpoint: string,
+  params: AttomParams = {}
+): Promise<T> {
+  const path = endpoint.replace(/^\//, "");
+  const qs = buildQuery(params);
+  const url = `${ATTOM_BASE}/${path}${qs ? `?${qs}` : ""}`;
+  return attomFetchUrl<T>(url);
 }
 
 /** ATTOM envelope returned by property endpoints */
@@ -164,14 +171,18 @@ export type AttomRawProperty = {
   assessment?: {
     assessed?: {
       assdTtlValue?: number;
+      assdttlvalue?: number;
       marketTtlValue?: number;
     };
     market?: {
       mktTtlValue?: number;
+      mktttlvalue?: number;
     };
     tax?: {
       taxAmt?: number;
+      taxamt?: number;
       taxYear?: number;
+      taxyear?: number;
     };
   };
   avm?: {
@@ -200,6 +211,37 @@ export type AttomRawProperty = {
   };
 };
 
+export type AttomLocationLookupResponse = {
+  status?: { msg?: string; code?: number; total?: number };
+  geographies?: Array<{
+    geoIdV4?: string;
+    geographyName?: string;
+    geographyTypeName?: string;
+    geographyTypeAbbreviation?: string;
+    details?: {
+      name?: string;
+      latitude?: number;
+      longitude?: number;
+      totalResidentCount?: number;
+      areaSquareMiles?: number;
+    };
+  }>;
+};
+
+/** Resolve city / place / neighborhood names to geoIdV4. */
+export async function attomLocationLookup(
+  name: string,
+  geographyTypeAbbreviation: "CI" | "PL" | "N2" | "N4" | "ZI" = "CI"
+) {
+  const qs = buildQuery({
+    geographyTypeAbbreviation,
+    name,
+  });
+  return attomFetchUrl<AttomLocationLookupResponse>(
+    `${ATTOM_GATEWAY}/v4/location/lookup?${qs}`
+  );
+}
+
 /** Basic address match (attomId + address lines). */
 export async function attomLookupByAddress(address1: string, address2: string) {
   return attomFetch<AttomPropertyResponse>("property/address", {
@@ -224,13 +266,16 @@ export async function attomExpandedById(attomId: string | number) {
 }
 
 /**
- * Location / ZIP snapshot search (listing cards).
- * Prefer postalcode or city+state.
+ * Location snapshot search (listing cards).
+ * Prefer postalcode, lat/long+radius, or geoIdV4 (ZI/PL work; CI city ids often return empty on snapshot).
+ * Do NOT pass city/state — ATTOM rejects those params.
  */
 export async function attomSnapshotSearch(params: {
   postalcode?: string;
-  city?: string;
-  state?: string;
+  geoIdV4?: string;
+  latitude?: number | string;
+  longitude?: number | string;
+  radius?: number | string;
   address1?: string;
   address2?: string;
   pagesize?: number;
@@ -245,18 +290,48 @@ export async function attomSnapshotSearch(params: {
 }) {
   return attomFetch<AttomPropertyResponse>("property/snapshot", {
     postalcode: params.postalcode,
-    city: params.city,
-    state: params.state,
+    geoIdV4: params.geoIdV4,
+    latitude: params.latitude,
+    longitude: params.longitude,
+    radius: params.radius,
     address1: params.address1,
     address2: params.address2,
     pagesize: params.pagesize ?? 20,
     page: params.page ?? 1,
     minBeds: params.minBeds,
     maxBeds: params.maxBeds,
-    minBaths: params.minBaths,
+    minBathsTotal: params.minBaths,
     minUniversalSize: params.minUniversalSize,
     maxUniversalSize: params.maxUniversalSize,
     minYearBuilt: params.minYearBuilt,
     maxYearBuilt: params.maxYearBuilt,
+  });
+}
+
+/** Assessment snapshot — includes market/assessed values missing from property snapshot. */
+export async function attomAssessmentSnapshot(params: {
+  postalcode?: string;
+  geoIdV4?: string;
+  latitude?: number | string;
+  longitude?: number | string;
+  radius?: number | string;
+  pagesize?: number;
+  page?: number;
+}) {
+  return attomFetch<AttomPropertyResponse>("assessment/snapshot", {
+    postalcode: params.postalcode,
+    geoIdV4: params.geoIdV4,
+    latitude: params.latitude,
+    longitude: params.longitude,
+    radius: params.radius,
+    pagesize: params.pagesize ?? 50,
+    page: params.page ?? 1,
+  });
+}
+
+/** AVM detail for a single property. */
+export async function attomAvmDetail(attomId: string | number) {
+  return attomFetch<AttomPropertyResponse>("attomavm/detail", {
+    attomId: String(attomId),
   });
 }

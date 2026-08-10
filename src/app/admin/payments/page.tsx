@@ -100,7 +100,7 @@ export default function AdminPaymentsPage() {
       />
 
       {notice && (
-        <div className="rounded-xl border border-teal-700/20 bg-teal-700/10 px-4 py-3 text-xs text-teal-800">
+        <div className="rounded-xl border border-blue-700/20 bg-blue-700/10 px-4 py-3 text-xs text-blue-800">
           {notice}
         </div>
       )}
@@ -111,14 +111,14 @@ export default function AdminPaymentsPage() {
           loading && !data
             ? 'border-[var(--border)] bg-white'
             : stripeConfigured
-              ? 'border-teal-700/25 bg-teal-700/5'
+              ? 'border-blue-700/25 bg-blue-700/5'
               : 'border-amber-500/30 bg-amber-50'
         }`}
       >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm font-bold">
-              <ShieldCheck className="h-4 w-4 text-teal-700" />
+              <ShieldCheck className="h-4 w-4 text-blue-700" />
               Stripe connection
             </div>
             {loading && !data ? (
@@ -195,7 +195,7 @@ export default function AdminPaymentsPage() {
             onClick={() => setTab(t.key)}
             className={`min-h-10 cursor-pointer rounded-xl px-3 py-2 text-xs font-bold ${
               tab === t.key
-                ? 'bg-teal-700 text-white'
+                ? 'bg-blue-700 text-white'
                 : 'border border-[var(--border)] text-[var(--muted)]'
             }`}
           >
@@ -309,7 +309,7 @@ export default function AdminPaymentsPage() {
                         <div className="text-[10px] text-[var(--muted)]">{o.user.email}</div>
                       </td>
                       <td className="px-3 py-2.5">{o.plan}</td>
-                      <td className="px-3 py-2.5 font-bold text-teal-800">${o.amount.toFixed(2)}</td>
+                      <td className="px-3 py-2.5 font-bold text-blue-800">${o.amount.toFixed(2)}</td>
                       <td className="px-3 py-2.5 uppercase">{o.status}</td>
                       <td className="px-3 py-2.5 text-[var(--muted)]">
                         {new Date(o.createdAt).toLocaleString()}
@@ -358,7 +358,7 @@ export default function AdminPaymentsPage() {
                       <tr key={inv.id}>
                         <td className="py-2.5">{inv.customerEmail || '—'}</td>
                         <td className="px-3 py-2.5">{inv.description}</td>
-                        <td className="px-3 py-2.5 font-bold text-teal-800">
+                        <td className="px-3 py-2.5 font-bold text-blue-800">
                           ${inv.amount.toFixed(2)}
                         </td>
                         <td className="px-3 py-2.5 uppercase">{inv.status}</td>
@@ -421,7 +421,7 @@ export default function AdminPaymentsPage() {
                     {e.user?.email || '—'} · {e.description}
                   </div>
                   {e.stripeObjectId ? (
-                    <code className="text-[10px] text-teal-800">{e.stripeObjectId}</code>
+                    <code className="text-[10px] text-blue-800">{e.stripeObjectId}</code>
                   ) : null}
                 </div>
                 <span className="shrink-0 text-[10px] text-[var(--muted-foreground)]">
@@ -455,7 +455,7 @@ export default function AdminPaymentsPage() {
                         <div className="font-semibold">{s.user.name || s.user.email}</div>
                         <div className="text-[10px] text-[var(--muted)]">{s.user.email}</div>
                       </td>
-                      <td className="px-3 py-2.5 font-bold text-teal-800">{s.plan}</td>
+                      <td className="px-3 py-2.5 font-bold text-blue-800">{s.plan}</td>
                       <td className="px-3 py-2.5 capitalize">
                         {'billingInterval' in s && s.billingInterval
                           ? String(s.billingInterval)
@@ -500,7 +500,7 @@ function Badge({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span
       className={`rounded-md px-2 py-1 ${
-        ok ? 'bg-teal-700/15 text-teal-800' : 'bg-amber-500/15 text-amber-900'
+        ok ? 'bg-blue-700/15 text-blue-800' : 'bg-amber-500/15 text-amber-900'
       }`}
     >
       {ok ? '✓' : '!'} {label}
@@ -527,7 +527,7 @@ function Kpi({
           {loading || value == null ? <SkeletonValue /> : value}
         </div>
       </div>
-      <Icon className="h-5 w-5 text-teal-700" />
+      <Icon className="h-5 w-5 text-blue-700" />
     </SpotlightCard>
   );
 }

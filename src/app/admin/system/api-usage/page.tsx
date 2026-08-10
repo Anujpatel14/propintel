@@ -7,6 +7,7 @@ import SpotlightCard from '@/components/ui/SpotlightCard';
 import PageHeader from '@/components/dashboard/PageHeader';
 import { SkeletonRows, SkeletonValue } from '@/components/ui/Skeleton';
 import { getAdminApiUsage } from '@/app/actions/adminExpandActions';
+import { adminHref } from '@/lib/adminPath';
 
 export default function AdminApiUsagePage() {
   const [loading, setLoading] = useState(true);
@@ -91,7 +92,7 @@ export default function AdminApiUsagePage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="surface-card space-y-4 p-5">
           <h2 className="flex items-center gap-2 text-sm font-bold">
-            <Cpu className="h-4 w-4 text-teal-700" /> Model & rate limits
+            <Cpu className="h-4 w-4 text-blue-700" /> Model & rate limits
           </h2>
           <label className="block space-y-1 text-xs">
             <span className="font-semibold uppercase text-[var(--muted)]">Active model</span>
@@ -133,8 +134,8 @@ export default function AdminApiUsagePage() {
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-sm font-bold">Recent AI activity</h2>
             <Link
-              href="/admin/system/ai-activity"
-              className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-bold text-teal-800 hover:underline"
+              href={adminHref('/admin/system/ai-activity')}
+              className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-bold text-blue-800 hover:underline"
             >
               Show all <ArrowRight className="h-3 w-3" />
             </Link>

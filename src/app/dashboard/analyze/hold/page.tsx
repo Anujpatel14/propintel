@@ -1,12 +1,18 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, Cpu, FileDown, Loader2, Save } from 'lucide-react';
-import PageHeader from '@/components/dashboard/PageHeader';
-import SpotlightCard from '@/components/ui/SpotlightCard';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { Cpu, Loader2, Sparkles } from 'lucide-react';
 import { AiVerdictCard } from '@/components/dashboard/AiVerdictCard';
+import {
+  AnalyzeActions,
+  AnalyzeAddressField,
+  AnalyzeField,
+  MetricTile,
+  SectionLabel,
+} from '@/components/dashboard/AnalyzeUI';
+import { BarChart } from '@/components/ui/Charts';
 import { holdMetrics, money, pct } from '@/lib/calculators';
 import { savePropertyAnalysis } from '@/app/actions/analysisActions';
 import {
@@ -17,39 +23,9 @@ import { createReportAction } from '@/app/actions/reportActions';
 import { exportToPDF } from '@/lib/services/reports';
 import { useToast } from '@/components/ui/Toast';
 
-function Field({
-  label,
-  value,
-  onChange,
-  suffix,
-}: {
-  label: string;
-  value: number;
-  onChange: (n: number) => void;
-  suffix?: string;
-}) {
-  return (
-    <label className="block space-y-1">
-      <span className="text-xs text-[var(--muted)]">{label}</span>
-      <div className="relative">
-        <input
-          type="number"
-          value={Number.isFinite(value) ? value : 0}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-teal-800/30"
-        />
-        {suffix ? (
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--muted)]">
-            {suffix}
-          </span>
-        ) : null}
-      </div>
-    </label>
-  );
-}
-
 function HoldAnalyzeInner() {
   const toast = useToast();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [address, setAddress] = useState('123 Main St');
   const [city, setCity] = useState('Austin');
@@ -130,6 +106,27 @@ function HoldAnalyzeInner() {
     ]
   );
 
+  const expenseBars = useMemo(
+    () =>
+      [
+        { label: 'Mort', value: Math.round(m.mortgage), tone: 'flat' as const },
+        { label: 'Tax', value: Math.round(taxes), tone: 'flat' as const },
+        { label: 'Ins', value: Math.round(insurance), tone: 'flat' as const },
+        { label: 'HOA', value: Math.round(hoa), tone: 'flat' as const },
+        {
+          label: 'Vac',
+          value: Math.round(rent * (vacancyRate / 100)),
+          tone: 'down' as const,
+        },
+        {
+          label: 'Maint',
+          value: Math.round(rent * (maintenanceRate / 100)),
+          tone: 'down' as const,
+        },
+      ].filter((d) => d.value > 0),
+    [m.mortgage, taxes, insurance, hoa, rent, vacancyRate, maintenanceRate]
+  );
+
   const runAi = async () => {
     if (aiRunning) return;
     setAiRunning(true);
@@ -195,7 +192,8 @@ function HoldAnalyzeInner() {
             }
           : null,
       });
-      toast.success('Deal saved', 'Open it under Deals');
+      toast.success('Deal saved', 'Added to Deals + CRM underwriting');
+      router.push('/dashboard/deals');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -231,139 +229,224 @@ function HoldAnalyzeInner() {
     toast.success('PDF downloaded', 'Also in Reports → History');
   };
 
-  const resultRows = [
-    { label: 'Monthly cash flow', value: money(m.cashFlow), tone: m.cashFlow >= 0 ? 'good' : 'bad' },
-    { label: 'Cap rate', value: pct(m.capRate) },
-    { label: 'Cash on cash', value: pct(m.cashOnCash) },
-    { label: 'DSCR', value: m.dscr.toFixed(2) },
-    { label: 'ROI (est.)', value: pct(m.roi) },
-    { label: 'Mortgage / mo', value: money(m.mortgage) },
-    { label: 'Break-even rent', value: money(m.breakEvenRent) },
-    { label: 'Cash invested', value: money(m.totalCashIn) },
-  ];
-
   return (
-    <div className="space-y-8">
-      <PageHeader
-        title="Buy & Hold analysis"
-        description="Calculator → results → AI → save deal → report. Uses your property data, not live ATTOM."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/dashboard/analyze"
-              className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
-            >
-              <ArrowLeft className="h-4 w-4" /> Analyze hub
-            </Link>
-            <button
-              type="button"
-              disabled={aiRunning}
-              onClick={() => void runAi()}
-              className="inline-flex items-center gap-2 rounded-lg border border-teal-800/30 bg-teal-800/10 px-3 py-2 text-sm font-medium text-teal-900 disabled:opacity-60"
-            >
-              {aiRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cpu className="h-4 w-4" />}
-              Run AI
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void saveDeal()}
-              className="inline-flex items-center gap-2 rounded-lg bg-teal-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save deal
-            </button>
-            <button
-              type="button"
-              onClick={() => void generateReport()}
-              className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
-            >
-              <FileDown className="h-4 w-4" /> Report PDF
-            </button>
+    <div className="mx-auto max-w-[1200px] space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-[#dbe7ff] px-3 py-1 text-[10px] font-bold tracking-[0.14em] text-[#1639a8] uppercase">
+            Buy & Hold · Underwriting
           </div>
-        }
-      />
-
-      <div className="grid gap-4 lg:grid-cols-5">
-        <SpotlightCard className="space-y-4 p-5 lg:col-span-3">
-          <h2 className="font-display text-lg">Calculator</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block space-y-1 sm:col-span-2">
-              <span className="text-xs text-[var(--muted)]">Address</span>
-              <input
-                value={address}
-                onChange={(e) => {
-                  setAddress(e.target.value);
-                  setAiPreview(null);
-                }}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
-              />
-            </label>
-            <Field label="Purchase price" value={purchasePrice} onChange={(n) => { setPurchasePrice(n); setAiPreview(null); }} />
-            <Field label="ARV" value={arv} onChange={setArv} />
-            <Field label="Rehab" value={rehabCost} onChange={(n) => { setRehabCost(n); setAiPreview(null); }} />
-            <Field label="Monthly rent" value={rent} onChange={(n) => { setRent(n); setAiPreview(null); }} />
-            <Field label="Down payment" value={downPaymentPercent} onChange={setDownPaymentPercent} suffix="%" />
-            <Field label="Mortgage rate" value={mortgageRate} onChange={setMortgageRate} suffix="%" />
-            <Field label="Term (years)" value={mortgageTerm} onChange={setMortgageTerm} />
-            <Field label="Taxes / mo" value={taxes} onChange={setTaxes} />
-            <Field label="Insurance / mo" value={insurance} onChange={setInsurance} />
-            <Field label="HOA / mo" value={hoa} onChange={setHoa} />
-            <Field label="Utilities / mo" value={utilities} onChange={setUtilities} />
-            <Field label="Vacancy" value={vacancyRate} onChange={setVacancyRate} suffix="%" />
-            <Field label="Maintenance" value={maintenanceRate} onChange={setMaintenanceRate} suffix="%" />
-            <Field label="Closing costs" value={closingCostPercent} onChange={setClosingCostPercent} suffix="%" />
-          </div>
-        </SpotlightCard>
-
-        <SpotlightCard className="p-5 lg:col-span-2">
-          <h2 className="mb-4 font-display text-lg">Results</h2>
-          <div className="space-y-0">
-            {resultRows.map((row) => (
-              <div
-                key={row.label}
-                className="flex items-baseline justify-between gap-3 border-b border-[var(--border)] py-3 last:border-0"
-              >
-                <span className="text-xs text-[var(--muted)]">{row.label}</span>
-                <span
-                  className={`text-sm font-semibold ${
-                    row.tone === 'good'
-                      ? 'text-teal-800'
-                      : row.tone === 'bad'
-                        ? 'text-red-700'
-                        : 'text-foreground'
-                  }`}
-                >
-                  {row.value}
-                </span>
-              </div>
-            ))}
-          </div>
-        </SpotlightCard>
+          <h1 className="mt-3 font-display text-3xl font-bold tracking-tight text-[#0b1220]">
+            Buy & Hold analysis
+          </h1>
+          <p className="mt-1.5 max-w-xl text-sm text-[var(--muted)]">
+            Calculator → results → AI → save deal → report. Uses your property data, not live ATTOM.
+          </p>
+        </div>
+        <AnalyzeActions
+          aiRunning={aiRunning}
+          saving={saving}
+          onAi={() => void runAi()}
+          onSave={() => void saveDeal()}
+          onReport={() => void generateReport()}
+        />
       </div>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="font-display text-xl">AI summary</h2>
+      <motion.section
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[#0b1220] p-5 text-white sm:p-6"
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_80%_at_100%_0%,rgba(59,130,246,0.35),transparent_55%)]" />
+        <div className="relative grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.14em] text-blue-200/80 uppercase">
+              Monthly cash flow
+            </p>
+            <p
+              className={`mt-1 font-display text-3xl font-bold ${
+                m.cashFlow >= 0 ? 'text-emerald-300' : 'text-rose-300'
+              }`}
+            >
+              {money(m.cashFlow)}
+            </p>
+            <p className="mt-1 truncate text-xs text-white/55">{address}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.14em] text-blue-200/80 uppercase">
+              Cap rate
+            </p>
+            <p className="mt-1 font-display text-2xl font-bold">{pct(m.capRate)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.14em] text-blue-200/80 uppercase">
+              Cash on cash
+            </p>
+            <p className="mt-1 font-display text-2xl font-bold">{pct(m.cashOnCash)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.14em] text-blue-200/80 uppercase">
+              DSCR
+            </p>
+            <p className="mt-1 font-display text-2xl font-bold">{m.dscr.toFixed(2)}</p>
+          </div>
+        </div>
+      </motion.section>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricTile label="ROI (est.)" value={pct(m.roi)} />
+        <MetricTile label="Mortgage / mo" value={money(m.mortgage)} />
+        <MetricTile label="Break-even rent" value={money(m.breakEvenRent)} />
+        <MetricTile label="Cash invested" value={money(m.totalCashIn)} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-5">
+        <div className="space-y-4 rounded-3xl border border-[var(--border)] bg-white p-5 lg:col-span-3">
+          <SectionLabel>Acquisition</SectionLabel>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <AnalyzeAddressField
+              value={address}
+              onChange={(v) => {
+                setAddress(v);
+                setAiPreview(null);
+              }}
+            />
+            <AnalyzeField
+              label="Purchase price"
+              prefix="$"
+              value={purchasePrice}
+              onChange={(n) => {
+                setPurchasePrice(n);
+                setAiPreview(null);
+              }}
+            />
+            <AnalyzeField label="ARV" prefix="$" value={arv} onChange={setArv} />
+            <AnalyzeField
+              label="Rehab"
+              prefix="$"
+              value={rehabCost}
+              onChange={(n) => {
+                setRehabCost(n);
+                setAiPreview(null);
+              }}
+            />
+            <AnalyzeField
+              label="Monthly rent"
+              prefix="$"
+              value={rent}
+              onChange={(n) => {
+                setRent(n);
+                setAiPreview(null);
+              }}
+            />
+          </div>
+
+          <div className="border-t border-[var(--border)] pt-4">
+            <SectionLabel>Financing</SectionLabel>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <AnalyzeField
+                label="Down payment"
+                value={downPaymentPercent}
+                onChange={setDownPaymentPercent}
+                suffix="%"
+              />
+              <AnalyzeField
+                label="Mortgage rate"
+                value={mortgageRate}
+                onChange={setMortgageRate}
+                suffix="%"
+              />
+              <AnalyzeField label="Term (years)" value={mortgageTerm} onChange={setMortgageTerm} />
+              <AnalyzeField
+                label="Closing costs"
+                value={closingCostPercent}
+                onChange={setClosingCostPercent}
+                suffix="%"
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-[var(--border)] pt-4">
+            <SectionLabel>Monthly expenses</SectionLabel>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <AnalyzeField label="Taxes / mo" prefix="$" value={taxes} onChange={setTaxes} />
+              <AnalyzeField
+                label="Insurance / mo"
+                prefix="$"
+                value={insurance}
+                onChange={setInsurance}
+              />
+              <AnalyzeField label="HOA / mo" prefix="$" value={hoa} onChange={setHoa} />
+              <AnalyzeField
+                label="Utilities / mo"
+                prefix="$"
+                value={utilities}
+                onChange={setUtilities}
+              />
+              <AnalyzeField
+                label="Vacancy"
+                value={vacancyRate}
+                onChange={setVacancyRate}
+                suffix="%"
+              />
+              <AnalyzeField
+                label="Maintenance"
+                value={maintenanceRate}
+                onChange={setMaintenanceRate}
+                suffix="%"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 rounded-3xl border border-[var(--border)] bg-white p-5 lg:col-span-2">
+          <SectionLabel>Expense mix / mo</SectionLabel>
+          <p className="text-sm text-[var(--muted)]">Where rent goes before cash flow</p>
+          {expenseBars.length ? (
+            <BarChart data={expenseBars} height={200} />
+          ) : (
+            <p className="py-10 text-center text-sm text-[var(--muted)]">Enter expenses to chart</p>
+          )}
+          <div className="rounded-2xl bg-[#f3f6fb] px-4 py-3 text-xs text-[var(--muted)]">
+            Rent <span className="font-semibold text-[#0b1220]">{money(rent)}</span> − expenses →{' '}
+            <span
+              className={`font-semibold ${m.cashFlow >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}
+            >
+              {money(m.cashFlow)}
+            </span>{' '}
+            cash flow
+          </div>
+        </div>
+      </div>
+
+      <section className="overflow-hidden rounded-3xl border border-[var(--border)] bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[linear-gradient(180deg,var(--panel-grad-top),var(--panel-grad-bottom))] px-5 py-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-blue-800" />
+            <h2 className="font-display text-lg font-bold">AI summary</h2>
+          </div>
           {!aiPreview ? (
             <button
               type="button"
               disabled={aiRunning}
               onClick={() => void runAi()}
-              className="inline-flex items-center gap-2 rounded-lg bg-teal-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#1d4ed8] px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
               {aiRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cpu className="h-4 w-4" />}
               Generate AI summary
             </button>
           ) : null}
         </div>
-        {aiPreview ? (
-          <AiVerdictCard analysis={aiPreview} />
-        ) : (
-          <p className="rounded-xl border border-dashed border-[var(--border)] px-4 py-8 text-center text-sm text-[var(--muted)]">
-            Run AI after you like the calculator results. Saving a deal will include the AI verdict if present.
-          </p>
-        )}
+        <div className="p-5">
+          {aiPreview ? (
+            <AiVerdictCard analysis={aiPreview} />
+          ) : (
+            <p className="rounded-2xl border border-dashed border-[var(--border)] px-4 py-10 text-center text-sm text-[var(--muted)]">
+              Run AI after you like the calculator results. Saving a deal includes the AI verdict if
+              present.
+            </p>
+          )}
+        </div>
       </section>
     </div>
   );

@@ -89,7 +89,7 @@ export default function AdminDealsPage() {
 
       <div className="surface-card p-5">
         <h2 className="mb-4 flex items-center gap-2 text-sm font-bold">
-          <MapPin className="h-4 w-4 text-teal-700" /> Top analyzed markets
+          <MapPin className="h-4 w-4 text-blue-700" /> Top analyzed markets
         </h2>
         {loading ? (
           <SkeletonRows rows={5} cols={5} />
@@ -114,7 +114,7 @@ export default function AdminDealsPage() {
                     <td className="px-3 py-2.5">{m.deals}</td>
                     <td className="px-3 py-2.5">{m.avgCapRate.toFixed(2)}%</td>
                     <td className="px-3 py-2.5">{m.avgRoi.toFixed(2)}%</td>
-                    <td className="py-2.5 font-bold text-teal-800">
+                    <td className="py-2.5 font-bold text-blue-800">
                       ${m.volume.toLocaleString()}
                     </td>
                   </tr>

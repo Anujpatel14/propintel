@@ -6,6 +6,7 @@ import { ArrowLeft, RefreshCw, Search } from 'lucide-react';
 import PageHeader from '@/components/dashboard/PageHeader';
 import { SkeletonRows } from '@/components/ui/Skeleton';
 import { getAdminAiActivity } from '@/app/actions/adminExpandActions';
+import { adminHref } from '@/lib/adminPath';
 
 type LogRow = {
   id: string;
@@ -81,7 +82,7 @@ export default function AdminAiActivityPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             <Link
-              href="/admin/system/api-usage"
+              href={adminHref('/admin/system/api-usage')}
               className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back to usage

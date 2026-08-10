@@ -1,15 +1,13 @@
 'use server';
 
 import { prisma, withDbRetry } from '@/lib/db';
-import { requireAuth } from '@/lib/services/auth';
+import { requireAdminAccess } from '@/lib/requireAdminAccess';
 import { isStripeConfigured, refundPayment, getStripe } from '@/lib/services/stripe';
 import { sumMrr } from '@/lib/billingMetrics';
 import { revalidatePath } from 'next/cache';
 
 async function requireAdmin() {
-  const user = await requireAuth();
-  if (user.role !== 'ADMIN') throw new Error('Admin only');
-  return user;
+  return requireAdminAccess();
 }
 
 export async function getAdminPaymentDashboard() {

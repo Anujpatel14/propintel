@@ -55,7 +55,7 @@ export default function AccountSettingsPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="surface-card space-y-3 p-5">
           <div className="flex items-center gap-2 text-sm font-bold">
-            <Mail className="h-4 w-4 text-teal-700" /> Change email
+            <Mail className="h-4 w-4 text-blue-700" /> Change email
           </div>
           <p className="text-xs text-[var(--muted)]">
             Update your login email in the account manager below (Email addresses). Confirm the
@@ -68,7 +68,7 @@ export default function AccountSettingsPage() {
 
         <div className="surface-card space-y-3 p-5">
           <div className="flex items-center gap-2 text-sm font-bold">
-            <KeyRound className="h-4 w-4 text-teal-700" /> Password
+            <KeyRound className="h-4 w-4 text-blue-700" /> Password
           </div>
           <p className="text-xs text-[var(--muted)]">
             Change your password in Security below, or start a forgot-password email reset.
@@ -90,14 +90,14 @@ export default function AccountSettingsPage() {
 
         <div className="surface-card space-y-3 p-5">
           <div className="flex items-center gap-2 text-sm font-bold">
-            <Shield className="h-4 w-4 text-teal-700" /> Investor profile
+            <Shield className="h-4 w-4 text-blue-700" /> Investor profile
           </div>
           <p className="text-xs text-[var(--muted)]">
             Name, company, markets, and deal criteria are not managed here.
           </p>
           <Link
             href="/dashboard/settings/profile"
-            className="inline-flex items-center gap-1 text-xs font-bold text-teal-800 hover:underline"
+            className="inline-flex items-center gap-1 text-xs font-bold text-blue-800 hover:underline"
           >
             Edit investor profile <ArrowRight className="h-3.5 w-3.5" />
           </Link>

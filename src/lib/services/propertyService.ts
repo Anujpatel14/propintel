@@ -7,13 +7,16 @@ import { prisma, withDbRetry } from "@/lib/db";
 import { logError, writeLog } from "@/lib/logger";
 import {
   AttomError,
+  attomAssessmentSnapshot,
   attomExpandedByAddress,
   attomExpandedById,
+  attomLocationLookup,
   attomSnapshotSearch,
   isAttomConfigured,
   type AttomRawProperty,
 } from "@/lib/services/attom";
 import {
+  estimateMonthlyRent,
   mapAttomProperties,
   mapAttomProperty,
   type MappedProperty,
@@ -37,6 +40,128 @@ function cacheGet<T>(map: Map<string, CacheEntry<T>>, key: string): T | null {
 
 function cacheSet<T>(map: Map<string, CacheEntry<T>>, key: string, value: T, ttl: number) {
   map.set(key, { value, expires: Date.now() + ttl });
+}
+
+function enrichWithAssessments(
+  properties: MappedProperty[],
+  assessmentRows: AttomRawProperty[]
+): MappedProperty[] {
+  if (!assessmentRows.length) return properties;
+  const byId = new Map<string, MappedProperty>();
+  for (const raw of assessmentRows) {
+    const mapped = mapAttomProperty(raw);
+    if (mapped) byId.set(mapped.attomId, mapped);
+  }
+
+  return properties.map((p) => {
+    const enrich = byId.get(p.attomId);
+    if (!enrich) return p;
+    const estimatedValue = p.estimatedValue ?? enrich.estimatedValue ?? enrich.marketValue;
+    return {
+      ...p,
+      estimatedValue,
+      marketValue: p.marketValue ?? enrich.marketValue,
+      assessedValue: p.assessedValue ?? enrich.assessedValue,
+      taxAmount: p.taxAmount ?? enrich.taxAmount,
+      taxYear: p.taxYear ?? enrich.taxYear,
+      estimatedRent: p.estimatedRent ?? estimateMonthlyRent(estimatedValue),
+      lastSaleAmount: p.lastSaleAmount ?? enrich.lastSaleAmount,
+      lastSaleDate: p.lastSaleDate ?? enrich.lastSaleDate,
+    };
+  });
+}
+
+type ResolvedCityGeo = {
+  geoIdV4?: string;
+  geographyName: string;
+  latitude?: number;
+  longitude?: number;
+};
+
+/**
+ * Resolve a city name to ATTOM geography + coordinates.
+ * City-level CI geoIdV4 often returns empty on property/snapshot for this plan,
+ * so we rely on lat/long + radius for listing results.
+ */
+async function resolveCityGeography(
+  city: string,
+  state?: string
+): Promise<ResolvedCityGeo | null> {
+  const attempts: Array<{ name: string; type: "CI" | "PL" }> = [];
+  if (state) {
+    attempts.push({ name: `${city}, ${state}`, type: "CI" });
+    attempts.push({ name: `${city}, ${state}`, type: "PL" });
+  }
+  attempts.push({ name: city, type: "CI" });
+
+  for (const attempt of attempts) {
+    try {
+      const res = await attomLocationLookup(attempt.name, attempt.type);
+      let geos = [...(res.geographies || [])].filter(
+        (g) => g.geoIdV4 || (g.details?.latitude != null && g.details?.longitude != null)
+      );
+      if (!geos.length) continue;
+
+      if (state) {
+        const st = state.toUpperCase();
+        const matched = geos.filter((g) => {
+          const label = (g.geographyName || "").toUpperCase();
+          return label.includes(`, ${st}`) || label.endsWith(` ${st}`);
+        });
+        if (matched.length) geos = matched;
+      }
+
+      geos.sort(
+        (a, b) =>
+          (b.details?.totalResidentCount || 0) - (a.details?.totalResidentCount || 0)
+      );
+      const best = geos[0];
+      if (!best) continue;
+
+      return {
+        geoIdV4: best.geoIdV4,
+        geographyName: best.geographyName || `${city}${state ? `, ${state}` : ""}`,
+        latitude: best.details?.latitude,
+        longitude: best.details?.longitude,
+      };
+    } catch {
+      // try next attempt
+    }
+  }
+  return null;
+}
+
+async function enrichSearchValues(
+  properties: MappedProperty[],
+  opts: {
+    postalcode?: string;
+    geoIdV4?: string;
+    latitude?: number;
+    longitude?: number;
+    radius?: number;
+    page?: number;
+    pagesize?: number;
+  }
+): Promise<MappedProperty[]> {
+  if (!properties.length) return properties;
+  const missing = properties.filter((p) => p.estimatedValue == null);
+  if (!missing.length) return properties;
+
+  try {
+    const assess = await attomAssessmentSnapshot({
+      postalcode: opts.postalcode,
+      geoIdV4: opts.geoIdV4,
+      latitude: opts.latitude,
+      longitude: opts.longitude,
+      radius: opts.radius,
+      pagesize: Math.max(opts.pagesize ?? 20, properties.length),
+      page: opts.page ?? 1,
+    });
+    return enrichWithAssessments(properties, assess.property || []);
+  } catch (err) {
+    void logError("ATTOM assessment enrich failed", err, { category: "ACTION" });
+    return properties;
+  }
 }
 
 export type PropertySearchInput = {
@@ -199,14 +324,9 @@ export async function searchProperties(
   const pagesize = Math.min(Math.max(input.pagesize ?? 20, 1), 50);
   const page = Math.max(input.page ?? 1, 1);
 
-  // ATTOM snapshot requires state (or postal) with city — never call city-only.
+  // City-only still works via location lookup, but state improves match quality.
   if ((parsed.kind === "city_state" || city) && city && !state && !postalcode) {
-    return {
-      properties: [],
-      total: 0,
-      source: "EMPTY",
-      message: `Add a state with that city — try “${city}, CO” or search by ZIP instead.`,
-    };
+    // allow — resolveCityGeoId will try CI with city name alone
   }
 
   if (parsed.kind === "empty" && !postalcode && !city) {
@@ -219,6 +339,7 @@ export async function searchProperties(
   }
 
   const cacheKey = JSON.stringify({
+    v: 2,
     postalcode,
     city,
     state,
@@ -238,6 +359,8 @@ export async function searchProperties(
   try {
     let rawList: AttomRawProperty[] = [];
     let total = 0;
+    let geoIdV4: string | undefined;
+    let enrichPostal = postalcode;
 
     if (parsed.kind === "address" && parsed.address1) {
       const expanded = await attomExpandedByAddress(
@@ -268,17 +391,90 @@ export async function searchProperties(
       });
       rawList = snap.property || [];
       total = snap.status?.total ?? rawList.length;
-    } else if (city && state) {
-      const snap = await attomSnapshotSearch({
-        city,
-        state,
-        pagesize,
-        page,
-        minBeds: input.minBeds,
-        minBaths: input.minBaths,
-      });
-      rawList = snap.property || [];
-      total = snap.status?.total ?? rawList.length;
+    } else if (city) {
+      const geo = await resolveCityGeography(city, state);
+      if (!geo) {
+        return {
+          properties: [],
+          total: 0,
+          source: "EMPTY",
+          message: state
+            ? `No ATTOM geography matched “${city}, ${state}”. Try a ZIP or a fuller city name.`
+            : `Couldn’t resolve “${city}”. Try “${city}, ST” (e.g. Denver, CO) or a ZIP.`,
+        };
+      }
+
+      // City CI geoIds often return empty on snapshot — use radius around city center.
+      if (geo.latitude != null && geo.longitude != null) {
+        const radius = 5;
+        const snap = await attomSnapshotSearch({
+          latitude: geo.latitude,
+          longitude: geo.longitude,
+          radius,
+          pagesize,
+          page,
+          minBeds: input.minBeds,
+          minBaths: input.minBaths,
+        });
+        rawList = snap.property || [];
+        total = snap.status?.total ?? rawList.length;
+        geoIdV4 = geo.geoIdV4;
+        // Enrich with same radius window
+        let properties = mapAttomProperties(rawList);
+        properties = await enrichSearchValues(properties, {
+          latitude: geo.latitude,
+          longitude: geo.longitude,
+          radius,
+          page,
+          pagesize,
+        });
+        cacheSet(searchCache, cacheKey, properties, SEARCH_TTL_MS);
+        void writeLog({
+          level: "INFO",
+          category: "ACTION",
+          message: "ATTOM property search",
+          meta: {
+            count: properties.length,
+            postalcode,
+            city,
+            state,
+            geoIdV4,
+            geographyName: geo.geographyName,
+            mode: "city_radius",
+          },
+        });
+        if (!properties.length) {
+          return {
+            properties: [],
+            total: 0,
+            source: "EMPTY",
+            message:
+              "No properties matched near that city. Try a ZIP, “City, ST”, or a fuller street address.",
+          };
+        }
+        return { properties, total: total || properties.length, source: "ATTOM" };
+      }
+
+      // Fallback: try geoId (works for some PL/ZI ids; CI often empty)
+      if (geo.geoIdV4) {
+        geoIdV4 = geo.geoIdV4;
+        const snap = await attomSnapshotSearch({
+          geoIdV4,
+          pagesize,
+          page,
+          minBeds: input.minBeds,
+          minBaths: input.minBaths,
+        });
+        rawList = snap.property || [];
+        total = snap.status?.total ?? rawList.length;
+      } else {
+        return {
+          properties: [],
+          total: 0,
+          source: "EMPTY",
+          message: `Found “${geo.geographyName}” but no searchable coordinates. Try a ZIP code.`,
+        };
+      }
     } else {
       return {
         properties: [],
@@ -288,14 +484,21 @@ export async function searchProperties(
       };
     }
 
-    const properties = mapAttomProperties(rawList);
+    let properties = mapAttomProperties(rawList);
+    properties = await enrichSearchValues(properties, {
+      postalcode: enrichPostal,
+      geoIdV4,
+      page,
+      pagesize,
+    });
+
     cacheSet(searchCache, cacheKey, properties, SEARCH_TTL_MS);
 
     void writeLog({
       level: "INFO",
       category: "ACTION",
       message: "ATTOM property search",
-      meta: { count: properties.length, postalcode, city, state },
+      meta: { count: properties.length, postalcode, city, state, geoIdV4 },
     });
 
     if (!properties.length) {

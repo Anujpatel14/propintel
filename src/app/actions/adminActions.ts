@@ -1,17 +1,13 @@
 'use server';
 
 import { sumMrr } from '@/lib/billingMetrics';
-import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/services/auth';
+import { getCoachingExpertDelegate, prisma } from '@/lib/db';
+import { requireAdminAccess } from '@/lib/requireAdminAccess';
 import { Role } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 
 async function requireAdmin() {
-  const user = await requireAuth();
-  if (user.role !== 'ADMIN') {
-    throw new Error('Access denied. Administrator privileges required.');
-  }
-  return user;
+  return requireAdminAccess();
 }
 
 export async function getAdminDashboardMetrics() {
@@ -32,6 +28,15 @@ export async function getAdminDashboardMetrics() {
     where: { action: { in: ['CREATE_ANALYSIS', 'CREATE_FLIP_ANALYSIS'] } },
   });
 
+  const coachingExpert = getCoachingExpertDelegate();
+
+  const [pendingCoaching, activeExperts, investorCount, suspendedUsers] = await Promise.all([
+    prisma.coaching.count({ where: { status: 'PENDING' } }),
+    coachingExpert ? coachingExpert.count({ where: { isActive: true } } as never) : Promise.resolve(0),
+    prisma.user.count({ where: { role: 'INVESTOR' } }),
+    prisma.user.count({ where: { status: 'SUSPENDED' } }),
+  ]);
+
   const recentLogs = await prisma.activityLog.findMany({
     take: 10,
     orderBy: { createdAt: 'desc' },
@@ -46,11 +51,15 @@ export async function getAdminDashboardMetrics() {
     success: true,
     metrics: {
       totalUsers,
+      investorCount,
+      suspendedUsers,
       activeSubscribers: activeSubs.length,
       mrr,
       totalAnalyses,
       totalDeals,
       totalAiRequests,
+      pendingCoaching,
+      activeExperts,
     },
     recentLogs,
   };
@@ -79,5 +88,6 @@ export async function updateUserRole(userId: string, role: Role) {
   });
 
   revalidatePath('/admin');
+  revalidatePath('/admin/users');
   return { success: true, user: updatedUser };
 }

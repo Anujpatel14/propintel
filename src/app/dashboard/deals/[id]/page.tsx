@@ -60,7 +60,7 @@ export default function DealDetailPage() {
       <div className="space-y-4">
         <PageHeader title="Deal" />
         <p className="text-sm text-[var(--muted)]">{error || 'Not found'}</p>
-        <Link href="/dashboard/deals" className="text-sm text-teal-800 underline">
+        <Link href="/dashboard/deals" className="text-sm text-blue-800 underline">
           Back to Deals
         </Link>
       </div>
@@ -128,7 +128,7 @@ export default function DealDetailPage() {
             <button
               type="button"
               onClick={download}
-              className="inline-flex items-center gap-2 rounded-lg bg-teal-800 px-3 py-2 text-sm font-medium text-white"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-800 px-3 py-2 text-sm font-medium text-white"
             >
               <FileDown className="h-4 w-4" /> Report PDF
             </button>
@@ -168,7 +168,7 @@ export default function DealDetailPage() {
         <SpotlightCard className="p-5">
           <h2 className="font-display text-lg">AI summary</h2>
           {a.aiVerdict ? (
-            <p className="mt-2 text-sm font-semibold text-teal-900">{a.aiVerdict}</p>
+            <p className="mt-2 text-sm font-semibold text-blue-900">{a.aiVerdict}</p>
           ) : null}
           {a.aiHeadline ? <p className="mt-1 text-sm text-[var(--muted)]">{a.aiHeadline}</p> : null}
         </SpotlightCard>

@@ -183,7 +183,7 @@ export default function AdminUsersPage() {
                     <div className="text-[10px] text-[var(--muted-foreground)]">{u.company}</div>
                   </td>
                   <td className="px-3 py-3">
-                    <span className="badge-status bg-teal-700/15 text-teal-800">
+                    <span className="badge-status bg-blue-700/15 text-blue-800">
                       {u.role}
                     </span>
                   </td>
@@ -191,7 +191,7 @@ export default function AdminUsersPage() {
                   <td className="px-3 py-3">
                     <span
                       className={`inline-flex items-center gap-1 text-[9px] font-extrabold uppercase ${
-                        u.status === 'ACTIVE' ? 'text-teal-800' : 'text-red-500'
+                        u.status === 'ACTIVE' ? 'text-blue-800' : 'text-red-500'
                       }`}
                     >
                       {u.status === 'ACTIVE' ? (
@@ -214,7 +214,7 @@ export default function AdminUsersPage() {
                         onClick={() => toggleRole(u.id, u.role)}
                         className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[var(--border)] px-3 py-2 text-[11px] font-semibold disabled:opacity-50"
                       >
-                        <ArrowRightLeft className="h-3.5 w-3.5 text-teal-700" /> Role
+                        <ArrowRightLeft className="h-3.5 w-3.5 text-blue-700" /> Role
                       </button>
                       <button
                         type="button"
@@ -228,7 +228,7 @@ export default function AdminUsersPage() {
                           </>
                         ) : (
                           <>
-                            <UserCheck className="h-3.5 w-3.5 text-teal-700" /> Activate
+                            <UserCheck className="h-3.5 w-3.5 text-blue-700" /> Activate
                           </>
                         )}
                       </button>

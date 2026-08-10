@@ -1,15 +1,8 @@
 'use server';
 
-import { prisma, withDbRetry } from '@/lib/db';
+import { getCoachingExpertDelegate, prisma, requireCoachingExpertDelegate, withDbRetry } from '@/lib/db';
 import { requireAuth } from '@/lib/services/auth';
-import {
-  createGoogleMeetEvent,
-  deleteGoogleMeetEvent,
-  isGoogleMeetConfigured,
-  isSessionDayPassed,
-  startOfToday,
-  updateGoogleMeetEvent,
-} from '@/lib/services/googleMeet';
+import { isSessionDayPassed, startOfToday } from '@/lib/services/googleMeet';
 import { revalidatePath } from 'next/cache';
 
 const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED'] as const;
@@ -30,9 +23,29 @@ async function expirePastSessions(userId?: string) {
   );
 }
 
+/** Active experts for the investor Coaching page (admin-managed). */
+export async function getActiveCoachingExperts() {
+  await requireAuth();
+  const delegate = getCoachingExpertDelegate();
+  if (!delegate) {
+    return { success: true as const, experts: [] };
+  }
+  const experts = await withDbRetry(() =>
+    delegate.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    } as never)
+  );
+  return { success: true as const, experts };
+}
+
+/**
+ * Investor booking request — goes to admin as PENDING.
+ * No Google Meet / calendar links; admin coordinates offline.
+ */
 export async function bookCoachingSession(
   bookingDate: Date,
-  meta?: { coachName?: string; topic?: string }
+  meta?: { coachName?: string; topic?: string; expertId?: string }
 ) {
   const user = await requireAuth();
 
@@ -40,35 +53,32 @@ export async function bookCoachingSession(
     return { success: false as const, error: 'Cannot book a session on a past date.' };
   }
 
-  let meetingLink: string | null = null;
-  let calendarEventId: string | null = null;
-  let meetWarning: string | undefined;
+  let coachName = meta?.coachName?.trim() || null;
+  let expertId = meta?.expertId || null;
+  const expertDb = requireCoachingExpertDelegate();
 
-  if (isGoogleMeetConfigured()) {
-    try {
-      const meet = await createGoogleMeetEvent({
-        summary: `PropIntel Coaching — ${meta?.topic || 'Strategy Session'}`,
-        description: [
-          `Coach: ${meta?.coachName || 'Assigned advisor'}`,
-          `Investor: ${user.name || user.email}`,
-          `Topic: ${meta?.topic || 'Strategy Session'}`,
-        ].join('\n'),
-        start: bookingDate,
-        durationMinutes: 45,
-        attendeeEmail: user.email,
-      });
-      meetingLink = meet.meetingLink;
-      calendarEventId = meet.calendarEventId;
-    } catch (err) {
-      console.error('[coaching] Google Meet creation failed:', err);
-      meetWarning =
-        err instanceof Error
-          ? err.message
-          : 'Failed to create Google Meet link. Session saved without a join URL.';
+  if (expertId) {
+    const expert = (await withDbRetry(() =>
+      expertDb.findFirst({
+        where: { id: expertId, isActive: true },
+      } as never)
+    )) as { id: string; name: string } | null;
+    if (!expert) {
+      return { success: false as const, error: 'That expert is no longer available.' };
     }
-  } else {
-    meetWarning =
-      'Google Meet is not configured. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN to generate live Meet links.';
+    coachName = expert.name;
+    expertId = expert.id;
+  } else if (coachName) {
+    const byName = (await withDbRetry(() =>
+      expertDb.findFirst({
+        where: { name: coachName!, isActive: true },
+      } as never)
+    )) as { id: string } | null;
+    if (byName) expertId = byName.id;
+  }
+
+  if (!coachName) {
+    return { success: false as const, error: 'Please choose an expert.' };
   }
 
   const coaching = await withDbRetry(() =>
@@ -76,12 +86,13 @@ export async function bookCoachingSession(
       data: {
         userId: user.id,
         bookingDate,
-        status: 'CONFIRMED',
-        meetingLink,
-        calendarEventId,
-        paymentStatus: 'PAID',
-        coachName: meta?.coachName,
-        topic: meta?.topic,
+        status: 'PENDING',
+        meetingLink: null,
+        calendarEventId: null,
+        paymentStatus: 'UNPAID',
+        coachName,
+        expertId,
+        topic: meta?.topic?.trim() || 'Strategy Session',
       },
     })
   );
@@ -91,13 +102,14 @@ export async function bookCoachingSession(
       data: {
         userId: user.id,
         action: 'BOOK_COACHING',
-        details: `Booked coaching for ${bookingDate.toLocaleString()}${meetingLink ? ` · ${meetingLink}` : ''}`,
+        details: `Requested ${coachName} for ${bookingDate.toLocaleString()} — awaiting admin confirmation`,
       },
     })
   );
 
   revalidatePath('/dashboard/coaching');
-  return { success: true as const, coaching, meetWarning };
+  revalidatePath('/admin/coaching');
+  return { success: true as const, coaching };
 }
 
 export async function getUserCoachingSessions() {
@@ -108,13 +120,17 @@ export async function getUserCoachingSessions() {
     prisma.coaching.findMany({
       where: { userId: user.id },
       orderBy: { bookingDate: 'asc' },
+      include: {
+        expert: {
+          select: { id: true, name: true, specialty: true, avatarInitial: true },
+        },
+      },
     })
   );
 
   return {
     success: true as const,
     sessions,
-    meetConfigured: isGoogleMeetConfigured(),
   };
 }
 
@@ -125,6 +141,7 @@ export async function updateUserCoachingSession(
     coachName?: string;
     topic?: string;
     status?: string;
+    expertId?: string;
   }
 ) {
   const user = await requireAuth();
@@ -136,49 +153,36 @@ export async function updateUserCoachingSession(
     return { success: false as const, error: 'Session not found' };
   }
 
+  // Investors may only cancel or reschedule pending/confirmed requests
+  if (data.status && !['CANCELED', 'PENDING'].includes(data.status)) {
+    return { success: false as const, error: 'Invalid status change.' };
+  }
+
   if (data.bookingDate && isSessionDayPassed(data.bookingDate)) {
     return { success: false as const, error: 'Cannot move a session to a past date.' };
   }
 
-  let meetingLink = existing.meetingLink;
-  let calendarEventId = existing.calendarEventId;
   let nextStatus = data.status;
-
-  // Rescheduling an expired/canceled session into the future restores it
   if (data.bookingDate && !isSessionDayPassed(data.bookingDate)) {
     if (existing.status === 'EXPIRED' || existing.status === 'CANCELED') {
-      nextStatus = 'CONFIRMED';
+      nextStatus = 'PENDING';
+    } else if (existing.status === 'CONFIRMED') {
+      // Reschedule after confirm → back to pending for admin
+      nextStatus = 'PENDING';
     }
   }
 
-  const nextStart = data.bookingDate ?? existing.bookingDate;
-  const nextTopic = data.topic ?? existing.topic ?? 'Strategy Session';
-  const nextCoach = data.coachName ?? existing.coachName ?? 'Assigned advisor';
+  let coachName = data.coachName;
+  let expertId = data.expertId;
 
-  if (isGoogleMeetConfigured()) {
-    try {
-      if (calendarEventId && data.bookingDate) {
-        const updated = await updateGoogleMeetEvent(calendarEventId, {
-          summary: `PropIntel Coaching — ${nextTopic}`,
-          description: `Coach: ${nextCoach}\nInvestor: ${user.name || user.email}\nTopic: ${nextTopic}`,
-          start: nextStart,
-        });
-        if (updated) {
-          meetingLink = updated.meetingLink;
-          calendarEventId = updated.calendarEventId;
-        }
-      } else if (!calendarEventId && data.bookingDate) {
-        const created = await createGoogleMeetEvent({
-          summary: `PropIntel Coaching — ${nextTopic}`,
-          description: `Coach: ${nextCoach}\nInvestor: ${user.name || user.email}\nTopic: ${nextTopic}`,
-          start: nextStart,
-          attendeeEmail: user.email,
-        });
-        meetingLink = created.meetingLink;
-        calendarEventId = created.calendarEventId;
-      }
-    } catch (err) {
-      console.error('[coaching] Google Meet update failed:', err);
+  if (expertId) {
+    const expert = (await withDbRetry(() =>
+      requireCoachingExpertDelegate().findFirst({
+        where: { id: expertId, isActive: true },
+      } as never)
+    )) as { name: string } | null;
+    if (expert) {
+      coachName = expert.name;
     }
   }
 
@@ -187,11 +191,10 @@ export async function updateUserCoachingSession(
       where: { id },
       data: {
         ...(data.bookingDate !== undefined ? { bookingDate: data.bookingDate } : {}),
-        ...(data.coachName !== undefined ? { coachName: data.coachName } : {}),
+        ...(coachName !== undefined ? { coachName } : {}),
+        ...(expertId !== undefined ? { expertId } : {}),
         ...(data.topic !== undefined ? { topic: data.topic } : {}),
         ...(nextStatus !== undefined ? { status: nextStatus } : {}),
-        meetingLink,
-        calendarEventId,
       },
     })
   );
@@ -201,12 +204,13 @@ export async function updateUserCoachingSession(
       data: {
         userId: user.id,
         action: 'UPDATE_COACHING',
-        details: `Updated coaching session ${id}`,
+        details: `Updated coaching request ${id}`,
       },
     })
   );
 
   revalidatePath('/dashboard/coaching');
+  revalidatePath('/admin/coaching');
   return { success: true as const, coaching };
 }
 
@@ -220,10 +224,6 @@ export async function deleteUserCoachingSession(id: string) {
     return { success: false as const, error: 'Session not found' };
   }
 
-  if (existing.calendarEventId) {
-    await deleteGoogleMeetEvent(existing.calendarEventId);
-  }
-
   await withDbRetry(() => prisma.coaching.delete({ where: { id } }));
 
   await withDbRetry(() =>
@@ -231,11 +231,12 @@ export async function deleteUserCoachingSession(id: string) {
       data: {
         userId: user.id,
         action: 'DELETE_COACHING',
-        details: `Deleted coaching session scheduled for ${existing.bookingDate.toLocaleDateString()}`,
+        details: `Deleted coaching request for ${existing.bookingDate.toLocaleDateString()}`,
       },
     })
   );
 
   revalidatePath('/dashboard/coaching');
+  revalidatePath('/admin/coaching');
   return { success: true as const };
 }

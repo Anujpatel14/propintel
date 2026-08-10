@@ -2,8 +2,18 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Check, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
-import PageHeader from '@/components/dashboard/PageHeader';
+import { motion } from 'framer-motion';
+import {
+  Check,
+  ExternalLink,
+  Loader2,
+  AlertTriangle,
+  CreditCard,
+  Sparkles,
+  Shield,
+  Zap,
+  Receipt,
+} from 'lucide-react';
 import { Skeleton, SkeletonCards, SkeletonValue } from '@/components/ui/Skeleton';
 import {
   switchUserPlan,
@@ -242,18 +252,38 @@ function BillingPageInner() {
 
   const current = catalog.find((p) => p.code === currentPlan);
 
+  const planIcon = (code: string) => {
+    if (code === 'ENTERPRISE') return Shield;
+    if (code === 'PRO' || code === 'PROFESSIONAL') return Zap;
+    return Sparkles;
+  };
+
+  const statusTone =
+    status === 'ACTIVE'
+      ? 'bg-emerald-50 text-emerald-800 ring-emerald-200'
+      : status === 'PAST_DUE'
+        ? 'bg-amber-50 text-amber-900 ring-amber-200'
+        : 'bg-slate-100 text-slate-700 ring-slate-200';
+
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
-      <PageHeader
-        title="Billing"
-        description="Your plan, upgrades, and recent payments."
-      />
+    <div className="mx-auto max-w-5xl space-y-8">
+      <div>
+        <div className="inline-flex items-center gap-2 rounded-full bg-[#dbe7ff] px-3 py-1 text-[10px] font-bold tracking-[0.14em] text-[#1639a8] uppercase">
+          Subscription · Stripe
+        </div>
+        <h1 className="mt-3 font-display text-3xl font-bold tracking-tight text-[#0b1220] sm:text-4xl">
+          Billing
+        </h1>
+        <p className="mt-1.5 text-sm text-[var(--muted)]">
+          Your plan, upgrades, and recent payments — managed securely through Stripe.
+        </p>
+      </div>
 
       {notice && (
         <div
-          className={`rounded-xl px-4 py-3 text-sm ${
+          className={`rounded-2xl px-4 py-3 text-sm ${
             noticeTone === 'ok'
-              ? 'border border-teal-700/20 bg-teal-50 text-teal-900'
+              ? 'border border-blue-700/20 bg-blue-50 text-blue-900'
               : 'border border-amber-200 bg-amber-50 text-amber-950'
           }`}
         >
@@ -267,58 +297,68 @@ function BillingPageInner() {
         </div>
       )}
       {error && (
-        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           {error}
         </div>
       )}
 
-      {/* Current plan */}
-      <section className="rounded-2xl border border-[var(--border)] bg-white p-6">
+      {/* Current plan hero */}
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[#0b1220] p-6 text-white sm:p-8"
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_80%_at_100%_0%,rgba(59,130,246,0.35),transparent_55%),radial-gradient(60%_50%_at_0%_100%,rgba(29,78,216,0.25),transparent_50%)]" />
+        <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-blue-500/20 blur-3xl" />
         {loading ? (
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-2">
-              <Skeleton className="h-3 w-24" />
-              <SkeletonValue className="h-8 w-40" />
-              <Skeleton className="h-3 w-48" />
-            </div>
-            <Skeleton className="h-10 w-36 rounded-xl" />
+          <div className="relative space-y-3">
+            <Skeleton className="h-3 w-24 bg-white/10" />
+            <Skeleton className="h-10 w-48 bg-white/10" />
+            <Skeleton className="h-4 w-64 bg-white/10" />
           </div>
         ) : (
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--muted)]">
-                Current plan
-              </p>
-              <h2 className="mt-1 font-display text-2xl font-bold tracking-tight">
+          <div className="relative flex flex-wrap items-start justify-between gap-6">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[11px] font-bold tracking-[0.16em] text-blue-200/80 uppercase">
+                  Current plan
+                </p>
+                <span
+                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold ring-1 ring-inset ${statusTone}`}
+                >
+                  {status}
+                </span>
+              </div>
+              <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">
                 {current?.name || currentPlan}
               </h2>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                Status: <span className="font-semibold text-foreground">{status}</span>
+              <p className="mt-2 max-w-md text-sm text-white/65">
+                {current?.blurb || 'PropIntel subscription'}
                 {currentPlan !== 'FREE' && status === 'ACTIVE' ? (
                   <>
                     {' '}
-                    ·{' '}
-                    <span className="font-semibold text-foreground">
-                      {currentBillingInterval === 'year' ? 'Annual' : 'Monthly'}
+                    · Billed{' '}
+                    <span className="font-semibold text-white">
+                      {currentBillingInterval === 'year' ? 'annually' : 'monthly'}
                     </span>
                   </>
                 ) : null}
               </p>
               {currentPeriodEnd && status !== 'CANCELED' && currentPlan !== 'FREE' && (
-                <p className="mt-2 text-xs text-[var(--muted)]">
+                <p className="mt-3 text-xs text-white/55">
                   {cancelAtPeriodEnd ? (
                     <>
                       Cancels on{' '}
-                      <span className="font-semibold text-foreground">
+                      <span className="font-semibold text-white">
                         {new Date(currentPeriodEnd).toLocaleDateString()}
                       </span>
-                      — then you’ll move to Free. You can renew anytime from Manage billing.
+                      — then you’ll move to Free.
                     </>
                   ) : (
                     <>
-                      Current period renews{' '}
-                      <span className="font-semibold text-foreground">
+                      Renews{' '}
+                      <span className="font-semibold text-white">
                         {new Date(currentPeriodEnd).toLocaleDateString()}
                       </span>
                       . Plan changes only charge the prorated difference.
@@ -327,27 +367,27 @@ function BillingPageInner() {
                 </p>
               )}
               {status === 'PAST_DUE' && (
-                <p className="mt-2 text-xs font-medium text-amber-800">
+                <p className="mt-3 text-xs font-medium text-amber-200">
                   Payment failed. Update your card under Manage billing to keep {currentPlan} access.
                 </p>
               )}
               {status === 'CANCELED' && (
-                <p className="mt-2 text-xs text-[var(--muted)]">
+                <p className="mt-3 text-xs text-white/55">
                   Subscription ended. You’re on Free features until you subscribe again.
                 </p>
               )}
             </div>
             <div className="text-right">
-              <p className="font-display text-3xl font-bold">
+              <p className="font-display text-4xl font-bold tracking-tight">
                 ${current?.priceMonthly ?? 0}
-                <span className="text-sm font-normal text-[var(--muted)]">/mo</span>
+                <span className="text-base font-normal text-white/50">/mo</span>
               </p>
-              <div className="mt-3 flex flex-wrap justify-end gap-2">
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
                   onClick={handleRefreshPlan}
                   disabled={confirming}
-                  className="rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold hover:bg-[var(--surface-soft)] disabled:opacity-50"
+                  className="rounded-xl border border-white/20 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur hover:bg-white/10 disabled:opacity-50"
                 >
                   Refresh plan
                 </button>
@@ -356,12 +396,13 @@ function BillingPageInner() {
                     type="button"
                     onClick={handlePortal}
                     disabled={portalLoading || !hasStripeCustomer}
-                    className="btn-primary inline-flex items-center gap-1.5 px-3 py-2 text-xs disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-xs font-semibold text-[#0b1220] hover:bg-blue-50 disabled:opacity-50"
                   >
                     {portalLoading ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
                       <>
+                        <CreditCard className="h-3.5 w-3.5" />
                         Manage in Stripe <ExternalLink className="h-3.5 w-3.5" />
                       </>
                     )}
@@ -371,89 +412,107 @@ function BillingPageInner() {
             </div>
           </div>
         )}
-      </section>
+      </motion.section>
 
       {/* Plans */}
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-sm font-bold">Change plan</h3>
-          <div className="flex rounded-xl border border-[var(--border)] bg-white p-1 text-xs font-semibold">
+          <div>
+            <h3 className="font-display text-lg font-bold">Change plan</h3>
+            <p className="text-xs text-[var(--muted)]">Upgrade, switch interval, or cancel at period end</p>
+          </div>
+          <div className="flex rounded-xl border border-[var(--border)] bg-white p-1 text-xs font-semibold shadow-sm">
             {(['month', 'year'] as const).map((iv) => (
               <button
                 key={iv}
                 type="button"
                 onClick={() => setBillingInterval(iv)}
-                className={`rounded-lg px-3 py-1.5 ${
+                className={`rounded-lg px-3.5 py-1.5 transition ${
                   billingInterval === iv
-                    ? 'bg-[#171c19] text-white'
+                    ? 'bg-[#0b1220] text-white'
                     : 'text-[var(--muted)] hover:text-foreground'
                 }`}
               >
-                {iv === 'month' ? 'Monthly' : 'Annual'}
+                {iv === 'month' ? 'Monthly' : 'Annual · save 20%'}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="grid gap-4 md:grid-cols-3">
           {loading ? (
-            <SkeletonCards count={3} className="lg:grid-cols-1" />
+            <SkeletonCards count={3} className="md:col-span-3 md:grid-cols-3" />
           ) : (
-            catalog.map((p) => {
-            const isFree = p.code === 'FREE' || p.priceMonthly === 0;
-            const isCurrentPlan = p.code === currentPlan;
-            const intervalMatches = billingInterval === currentBillingInterval;
-            const isFullyCurrent =
-              isCurrentPlan && status === 'ACTIVE' && (isFree || intervalMatches);
-            const needsIntervalSwitch =
-              isCurrentPlan && status === 'ACTIVE' && !isFree && !intervalMatches;
-            const price =
-              billingInterval === 'year' && !isFree
-                ? Math.round(p.priceMonthly * 0.8)
-                : p.priceMonthly;
+            catalog.map((p, idx) => {
+              const isFree = p.code === 'FREE' || p.priceMonthly === 0;
+              const isCurrentPlan = p.code === currentPlan;
+              const intervalMatches = billingInterval === currentBillingInterval;
+              const isFullyCurrent =
+                isCurrentPlan && status === 'ACTIVE' && (isFree || intervalMatches);
+              const needsIntervalSwitch =
+                isCurrentPlan && status === 'ACTIVE' && !isFree && !intervalMatches;
+              const price =
+                billingInterval === 'year' && !isFree
+                  ? Math.round(p.priceMonthly * 0.8)
+                  : p.priceMonthly;
+              const Icon = planIcon(p.code);
+              const featured = !isFree && (p.code === 'PRO' || p.code === 'PROFESSIONAL' || idx === 1);
 
-            return (
-              <div
-                key={p.id}
-                className={`flex flex-wrap items-center justify-between gap-4 rounded-2xl border bg-white px-5 py-4 ${
-                  isFullyCurrent
-                    ? 'border-teal-700/40 ring-1 ring-teal-700/20'
-                    : 'border-[var(--border)]'
-                }`}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">{p.name}</span>
+              return (
+                <motion.div
+                  key={p.id}
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.06 }}
+                  className={`relative flex flex-col overflow-hidden rounded-2xl border bg-white p-5 shadow-[0_1px_0_rgba(15,23,42,0.04)] ${
+                    isFullyCurrent
+                      ? 'border-blue-700/50 ring-2 ring-blue-700/15'
+                      : featured
+                        ? 'border-blue-200'
+                        : 'border-[var(--border)]'
+                  }`}
+                >
+                  {featured && !isFullyCurrent && (
+                    <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[var(--hero-from)] to-[var(--hero-to)]" />
+                  )}
+                  <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-blue-500/10 blur-2xl" />
+                  <div className="relative flex items-start justify-between gap-2">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eff4ff] text-blue-800">
+                      <Icon className="h-5 w-5" />
+                    </span>
                     {isFullyCurrent && (
-                      <span className="inline-flex items-center gap-1 rounded-lg bg-teal-700/10 px-2 py-0.5 text-[10px] font-bold text-teal-800">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-700/10 px-2.5 py-0.5 text-[10px] font-bold text-blue-800">
                         <Check className="h-3 w-3" /> Current
                       </span>
                     )}
                     {needsIntervalSwitch && (
-                      <span className="rounded-lg bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                      <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-900">
                         Switch billing
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-xs text-[var(--muted)]">
+                  <h4 className="relative mt-4 font-display text-xl font-bold tracking-tight">
+                    {p.name}
+                  </h4>
+                  <p className="relative mt-1.5 min-h-[2.5rem] text-xs leading-relaxed text-[var(--muted)]">
                     {p.blurb || 'PropIntel subscription'}
                   </p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold">
-                    ${price}
-                    <span className="font-normal text-[var(--muted)]">
+                  <div className="relative mt-4">
+                    <span className="font-display text-3xl font-bold tracking-tight">${price}</span>
+                    <span className="text-sm text-[var(--muted)]">
                       /{billingInterval === 'year' && !isFree ? 'mo yearly' : 'mo'}
                     </span>
-                  </span>
+                  </div>
                   <button
                     type="button"
                     disabled={isFullyCurrent || switching !== null}
                     onClick={() => handleSwitchPlan(p.code)}
-                    className={`min-w-[7.5rem] rounded-xl px-4 py-2.5 text-xs font-semibold disabled:opacity-50 ${
-                      isFree
-                        ? 'border border-[var(--border)] hover:bg-[var(--surface-soft)]'
-                        : 'btn-primary'
+                    className={`relative mt-5 w-full rounded-xl px-4 py-2.5 text-xs font-semibold disabled:opacity-50 ${
+                      isFullyCurrent
+                        ? 'border border-[var(--border)] bg-[var(--surface-soft)] text-[var(--muted)]'
+                        : isFree
+                          ? 'border border-[var(--border)] hover:bg-[var(--surface-soft)]'
+                          : 'bg-[#1d4ed8] text-white shadow-sm hover:bg-[#1e40af]'
                     }`}
                   >
                     {switching === p.code ? (
@@ -474,27 +533,45 @@ function BillingPageInner() {
                       'Activate'
                     )}
                   </button>
-                </div>
-              </div>
-            );
-          })
+                </motion.div>
+              );
+            })
           )}
         </div>
       </section>
 
       {/* Orders */}
-      <section className="rounded-2xl border border-[var(--border)] bg-white p-6">
-        <h3 className="text-sm font-bold">Recent payments</h3>
+      <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white">
+        <div className="flex items-center gap-3 border-b border-[var(--border)] bg-[linear-gradient(180deg,#f8fafc,white)] px-5 py-4">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#eff4ff] text-blue-800">
+            <Receipt className="h-4 w-4" />
+          </span>
+          <div>
+            <h3 className="font-display text-base font-bold">Recent payments</h3>
+            <p className="text-xs text-[var(--muted)]">Invoices and receipts from Stripe</p>
+          </div>
+        </div>
         {loading ? (
-          <div className="mt-4">
+          <div className="p-5">
             <SkeletonCards count={3} className="lg:grid-cols-1" />
           </div>
         ) : orders.length === 0 ? (
-          <p className="mt-3 text-sm text-[var(--muted)]">No payments yet.</p>
+          <div className="px-5 py-10 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-soft)] text-[var(--muted)]">
+              <Receipt className="h-5 w-5" />
+            </div>
+            <p className="mt-3 text-sm font-medium text-[#0b1220]">No payments yet</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Subscribe to a paid plan and receipts will show up here.
+            </p>
+          </div>
         ) : (
-          <ul className="mt-4 divide-y divide-[var(--border)]">
+          <ul className="divide-y divide-[var(--border)]">
             {orders.slice(0, 8).map((o) => (
-              <li key={o.id} className="flex items-center justify-between gap-3 py-3 text-sm">
+              <li
+                key={o.id}
+                className="flex items-center justify-between gap-3 px-5 py-3.5 text-sm transition hover:bg-[var(--surface-soft)]/60"
+              >
                 <div className="min-w-0">
                   <p className="truncate font-medium">
                     {formatPaymentDescription(o.description, o.plan)}
@@ -510,7 +587,7 @@ function BillingPageInner() {
                       href={o.receiptUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-[11px] text-teal-800 hover:underline"
+                      className="text-[11px] font-medium text-blue-800 hover:underline"
                     >
                       Receipt
                     </a>

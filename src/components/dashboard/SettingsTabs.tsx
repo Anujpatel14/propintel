@@ -24,7 +24,7 @@ export default function SettingsTabs() {
             className={
               active
                 ? 'btn-primary px-3 py-2 text-xs'
-                : 'rounded-xl border border-[var(--border)] px-3 py-2 font-semibold text-[var(--muted)] hover:bg-white'
+                : 'rounded-xl border border-[var(--border)] px-3 py-2 font-semibold text-[var(--muted)] hover:bg-[var(--surface)]'
             }
           >
             {tab.label}

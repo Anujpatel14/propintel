@@ -1,17 +1,13 @@
 'use server';
 
-import { prisma, withDbRetry } from '@/lib/db';
-import { requireAuth } from '@/lib/services/auth';
+import { prisma, requireCoachingExpertDelegate, withDbRetry } from '@/lib/db';
+import { requireAdminAccess } from '@/lib/requireAdminAccess';
 import { Role, Prisma } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { sumMrr } from '@/lib/billingMetrics';
 
 async function requireAdmin() {
-  const user = await requireAuth();
-  if (user.role !== 'ADMIN') {
-    throw new Error('Access denied. Administrator privileges required.');
-  }
-  return user;
+  return requireAdminAccess();
 }
 
 export async function getAdminUsers(filters?: {
@@ -327,6 +323,8 @@ export async function upsertCmsContent(input: {
   });
 
   revalidatePath('/admin/cms');
+  revalidatePath('/');
+  revalidatePath('/dashboard/help');
   return { success: true, item };
 }
 
@@ -335,6 +333,8 @@ export async function deleteCmsContent(id: string) {
 
   await withDbRetry(() => prisma.cMSContent.delete({ where: { id } }));
   revalidatePath('/admin/cms');
+  revalidatePath('/');
+  revalidatePath('/dashboard/help');
   return { success: true };
 }
 
@@ -356,7 +356,10 @@ export async function getAdminCoachingSessions() {
 
   const sessions = await withDbRetry(() =>
     prisma.coaching.findMany({
-      include: { user: { select: { email: true, name: true } } },
+      include: {
+        user: { select: { email: true, name: true } },
+        expert: { select: { id: true, name: true, specialty: true } },
+      },
       orderBy: { bookingDate: 'desc' },
     })
   );
@@ -371,19 +374,140 @@ export async function updateAdminCoachingSession(
     meetingLink?: string;
     coachName?: string;
     notes?: string;
+    expertId?: string | null;
   }
 ) {
   await requireAdmin();
 
+  let coachName = data.coachName;
+  if (data.expertId) {
+    const expert = await withDbRetry(() =>
+      requireCoachingExpertDelegate().findUnique({ where: { id: data.expertId! } } as never)
+    );
+    if (expert) coachName = expert.name;
+  }
+
   const session = await withDbRetry(() =>
     prisma.coaching.update({
       where: { id },
-      data,
+      data: {
+        ...(data.status !== undefined ? { status: data.status } : {}),
+        ...(data.meetingLink !== undefined ? { meetingLink: data.meetingLink } : {}),
+        ...(data.notes !== undefined ? { notes: data.notes } : {}),
+        ...(coachName !== undefined ? { coachName } : {}),
+        ...(data.expertId !== undefined ? { expertId: data.expertId } : {}),
+      },
     })
   );
 
   revalidatePath('/admin/coaching');
+  revalidatePath('/dashboard/coaching');
   return { success: true, session };
+}
+
+export async function listAdminCoachingExperts() {
+  await requireAdmin();
+  const experts = await withDbRetry(() =>
+    requireCoachingExpertDelegate().findMany({
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      include: { _count: { select: { bookings: true } } },
+    } as never)
+  );
+  return { success: true as const, experts };
+}
+
+export async function createAdminCoachingExpert(input: {
+  name: string;
+  specialty?: string;
+  bio?: string;
+  avatarInitial?: string;
+  isActive?: boolean;
+  sortOrder?: number;
+}) {
+  await requireAdmin();
+  const name = input.name.trim();
+  if (!name) return { success: false as const, error: 'Name is required' };
+
+  const expert = await withDbRetry(() =>
+    requireCoachingExpertDelegate().create({
+      data: {
+        name,
+        specialty: input.specialty?.trim() || null,
+        bio: input.bio?.trim() || null,
+        avatarInitial:
+          input.avatarInitial?.trim().slice(0, 2).toUpperCase() ||
+          name.charAt(0).toUpperCase(),
+        isActive: input.isActive !== false,
+        sortOrder: input.sortOrder ?? 0,
+      },
+    } as never)
+  );
+
+  revalidatePath('/admin/coaching');
+  revalidatePath('/dashboard/coaching');
+  return { success: true as const, expert };
+}
+
+export async function updateAdminCoachingExpert(
+  id: string,
+  input: {
+    name?: string;
+    specialty?: string;
+    bio?: string;
+    avatarInitial?: string;
+    isActive?: boolean;
+    sortOrder?: number;
+  }
+) {
+  await requireAdmin();
+
+  const existing = (await withDbRetry(() =>
+    requireCoachingExpertDelegate().findUnique({ where: { id } } as never)
+  )) as { name: string } | null;
+  if (!existing) return { success: false as const, error: 'Expert not found' };
+
+  const expert = await withDbRetry(() =>
+    requireCoachingExpertDelegate().update({
+      where: { id },
+      data: {
+        ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+        ...(input.specialty !== undefined
+          ? { specialty: input.specialty.trim() || null }
+          : {}),
+        ...(input.bio !== undefined ? { bio: input.bio.trim() || null } : {}),
+        ...(input.avatarInitial !== undefined
+          ? {
+              avatarInitial:
+                input.avatarInitial.trim().slice(0, 2).toUpperCase() || null,
+            }
+          : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+        ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+      },
+    } as never)
+  );
+
+  // Keep denormalized coachName in sync on open requests
+  if (input.name && input.name.trim() !== existing.name) {
+    await withDbRetry(() =>
+      prisma.coaching.updateMany({
+        where: { expertId: id, status: { in: ['PENDING', 'CONFIRMED'] } },
+        data: { coachName: input.name!.trim() },
+      })
+    );
+  }
+
+  revalidatePath('/admin/coaching');
+  revalidatePath('/dashboard/coaching');
+  return { success: true as const, expert };
+}
+
+export async function deleteAdminCoachingExpert(id: string) {
+  await requireAdmin();
+  await withDbRetry(() => requireCoachingExpertDelegate().delete({ where: { id } } as never));
+  revalidatePath('/admin/coaching');
+  revalidatePath('/dashboard/coaching');
+  return { success: true as const };
 }
 
 export async function getAdminAuditLogs(filters?: {

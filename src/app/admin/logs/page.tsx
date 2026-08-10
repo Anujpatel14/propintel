@@ -56,9 +56,9 @@ function actionTone(action: string) {
     return 'bg-amber-500/12 text-amber-900';
   }
   if (a.includes('CREATE') || a.includes('SAVE') || a.includes('EXPORT')) {
-    return 'bg-teal-700/10 text-teal-900';
+    return 'bg-blue-700/10 text-blue-900';
   }
-  return 'bg-teal-700/8 text-teal-900';
+  return 'bg-blue-700/8 text-blue-900';
 }
 
 function formatRelative(date: Date | string) {
@@ -149,7 +149,7 @@ export default function AdminLogsPage() {
             type="button"
             onClick={() => load()}
             disabled={loading}
-            className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold hover:bg-white disabled:opacity-60"
+            className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold hover:bg-[var(--surface)] disabled:opacity-60"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             {loading ? 'Refreshing…' : 'Refresh'}
@@ -168,7 +168,7 @@ export default function AdminLogsPage() {
             </div>
             <p className="mt-1 text-[11px] text-[var(--muted)]">Events since midnight</p>
           </div>
-          <CalendarDays className="h-5 w-5 text-teal-700" />
+          <CalendarDays className="h-5 w-5 text-blue-700" />
         </SpotlightCard>
         <SpotlightCard className="flex items-start justify-between p-5">
           <div>
@@ -180,7 +180,7 @@ export default function AdminLogsPage() {
             </div>
             <p className="mt-1 text-[11px] text-[var(--muted)]">Total audit events</p>
           </div>
-          <Activity className="h-5 w-5 text-teal-700" />
+          <Activity className="h-5 w-5 text-blue-700" />
         </SpotlightCard>
         <SpotlightCard className="flex items-start justify-between p-5">
           <div>
@@ -192,7 +192,7 @@ export default function AdminLogsPage() {
             </div>
             <p className="mt-1 text-[11px] text-[var(--muted)]">Accounts with activity</p>
           </div>
-          <Users className="h-5 w-5 text-teal-700" />
+          <Users className="h-5 w-5 text-blue-700" />
         </SpotlightCard>
       </div>
 
@@ -212,7 +212,7 @@ export default function AdminLogsPage() {
             }}
             className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${
               applied.action === 'all'
-                ? 'bg-teal-700 text-white'
+                ? 'bg-blue-700 text-white'
                 : 'border border-[var(--border)] text-[var(--muted)] hover:text-foreground'
             }`}
           >
@@ -230,7 +230,7 @@ export default function AdminLogsPage() {
               }}
               className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${
                 applied.action === a.action
-                  ? 'bg-teal-700 text-white'
+                  ? 'bg-blue-700 text-white'
                   : 'border border-[var(--border)] text-[var(--muted)] hover:text-foreground'
               }`}
             >
@@ -355,7 +355,7 @@ export default function AdminLogsPage() {
                     onClick={() => setExpandedId(open ? null : log.id)}
                     className="flex w-full cursor-pointer items-start gap-3 px-4 py-3.5 text-left transition hover:bg-[var(--surface-soft)] sm:gap-4 sm:px-5"
                   >
-                    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-700/10 text-teal-800">
+                    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-700/10 text-blue-800">
                       <Activity className="h-4 w-4" />
                     </div>
 

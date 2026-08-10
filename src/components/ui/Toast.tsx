@@ -38,8 +38,8 @@ function toneIcon(tone: ToastTone) {
 }
 
 function toneClasses(tone: ToastTone) {
-  if (tone === 'success') return 'border-teal-800/25 text-teal-900';
-  if (tone === 'error') return 'border-red-300 text-red-800';
+  if (tone === 'success') return 'border-[color-mix(in_srgb,var(--cobalt)_35%,transparent)] text-[var(--sky-fg)]';
+  if (tone === 'error') return 'border-[var(--danger-border)] text-[var(--danger-fg)]';
   return 'border-[var(--border)] text-foreground';
 }
 
@@ -111,7 +111,7 @@ function ToastCard({
       initial={{ opacity: 0, y: 16, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 8, scale: 0.98 }}
-      className={`pointer-events-auto flex gap-3 rounded-xl border bg-white px-3.5 py-3 shadow-[var(--shadow-lift,0_8px_30px_rgba(0,0,0,0.12))] ${toneClasses(item.tone)}`}
+      className={`pointer-events-auto flex gap-3 rounded-xl border bg-[var(--surface)] px-3.5 py-3 shadow-[var(--shadow-lift,0_8px_30px_rgba(0,0,0,0.12))] ${toneClasses(item.tone)}`}
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" />
       <div className="min-w-0 flex-1">

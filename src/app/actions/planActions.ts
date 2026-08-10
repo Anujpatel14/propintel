@@ -1,16 +1,12 @@
 'use server';
 
 import { prisma, withDbRetry } from '@/lib/db';
-import { requireAuth } from '@/lib/services/auth';
+import { requireAdminAccess } from '@/lib/requireAdminAccess';
 import { revalidatePath } from 'next/cache';
 import { sumMrr } from '@/lib/billingMetrics';
 
 async function requireAdmin() {
-  const user = await requireAuth();
-  if (user.role !== 'ADMIN') {
-    throw new Error('Access denied. Administrator privileges required.');
-  }
-  return user;
+  return requireAdminAccess();
 }
 
 const DEFAULT_PLANS = [
@@ -242,5 +238,7 @@ export async function adminAssignUserPlan(
 
   revalidatePath('/admin/subscriptions');
   revalidatePath('/admin/users');
+  revalidatePath('/dashboard/billing');
+  revalidatePath('/dashboard');
   return { success: true as const, subscription };
 }
