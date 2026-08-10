@@ -81,11 +81,11 @@ function LoginPageContent() {
 
   if (!isLoaded || clearing || (isSignedIn && !sessionError && !suspendedError && !clearFailed)) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-5 text-sm text-[var(--muted)]">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-700" />
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#070b14] px-5 text-sm text-white/55">
+        <Loader2 className="h-8 w-8 animate-spin text-[#93c5fd]" />
         {clearing ? 'Refreshing your session…' : isSignedIn ? 'Taking you to your workspace…' : 'Loading…'}
         {clearing ? (
-          <p className="max-w-xs text-center text-xs text-[var(--muted)]">
+          <p className="max-w-xs text-center text-xs text-white/40">
             This should only take a moment. If it hangs, your database may not be configured yet.
           </p>
         ) : null}
@@ -94,17 +94,16 @@ function LoginPageContent() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-start justify-center overflow-x-clip px-4 py-10 sm:items-center sm:px-5 sm:py-12">
-      <div className="pointer-events-none absolute inset-0 blueprint-grid opacity-50" />
-      <div className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-blue-600/10 blur-3xl" />
-      <div className="pointer-events-none absolute -right-16 bottom-10 h-72 w-72 rounded-full bg-[#c4a050]/15 blur-3xl" />
+    <div className="relative flex min-h-screen items-start justify-center overflow-x-clip bg-[#070b14] px-4 py-10 text-white sm:items-center sm:px-5 sm:py-12">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(29,78,216,0.35),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(14,165,233,0.12),transparent_40%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,0.55)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.55)_1px,transparent_1px)] [background-size:40px_40px] [mask-image:radial-gradient(ellipse_at_center,black_25%,transparent_75%)]" />
 
       <div className="relative z-10 w-full max-w-[420px] min-w-0 space-y-6">
         <div className="text-center">
           <Link href="/" className="inline-flex justify-center">
-            <BrandLogo markSize={40} />
+            <BrandLogo markSize={40} className="[&_span]:text-white" />
           </Link>
-          <p className="mt-3 text-sm text-[var(--muted)]">
+          <p className="mt-3 text-sm text-white/60">
             {isRegister
               ? 'Create your investor workspace'
               : resetRequested
@@ -116,14 +115,13 @@ function LoginPageContent() {
         </div>
 
         {clearFailed ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
+          <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
             Session refresh timed out. Check that{' '}
-            <code className="rounded bg-white/70 px-1">DATABASE_URL</code> is set in{' '}
-            <code className="rounded bg-white/70 px-1">.env</code>, then sign in again.
+            <code className="rounded bg-black/30 px-1">DATABASE_URL</code> is set, then sign in again.
             <div className="mt-2">
               <button
                 type="button"
-                className="font-semibold text-blue-800 underline"
+                className="font-semibold text-[#93c5fd] underline"
                 onClick={() => {
                   window.location.replace('/login');
                 }}
@@ -135,44 +133,46 @@ function LoginPageContent() {
         ) : null}
 
         {suspendedError ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800">
+          <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-xs text-red-100">
             Your account has been suspended by an administrator. Contact support if you believe this
             is a mistake.
           </div>
         ) : null}
 
         {resetRequested && !isRegister ? (
-          <div className="rounded-xl border border-blue-700/20 bg-blue-700/5 px-4 py-3 text-xs text-blue-900">
+          <div className="rounded-xl border border-[#1d4ed8]/35 bg-[#1d4ed8]/15 px-4 py-3 text-xs text-[#dbe7ff]">
             Password reset requested for{' '}
             <strong>{prefillEmail || 'your account'}</strong>. Open{' '}
             <strong>Forgot password?</strong> on the form to receive a reset email.
           </div>
         ) : null}
 
-        {isRegister ? (
-          <SignUp
-            routing="hash"
-            forceRedirectUrl={afterAuthUrl}
-            fallbackRedirectUrl={afterAuthUrl}
-            signInUrl="/login"
-            appearance={clerkAuthAppearance}
-          />
-        ) : (
-          <SignIn
-            routing="hash"
-            forceRedirectUrl={afterAuthUrl}
-            fallbackRedirectUrl={afterAuthUrl}
-            signUpUrl="/login?tab=register"
-            appearance={clerkAuthAppearance}
-            initialValues={prefillEmail ? { emailAddress: prefillEmail } : undefined}
-          />
-        )}
+        <div className="clerk-auth overflow-hidden rounded-2xl bg-white shadow-[0_30px_80px_-40px_rgba(0,0,0,0.65)]">
+          {isRegister ? (
+            <SignUp
+              routing="hash"
+              forceRedirectUrl={afterAuthUrl}
+              fallbackRedirectUrl={afterAuthUrl}
+              signInUrl="/login"
+              appearance={clerkAuthAppearance}
+            />
+          ) : (
+            <SignIn
+              routing="hash"
+              forceRedirectUrl={afterAuthUrl}
+              fallbackRedirectUrl={afterAuthUrl}
+              signUpUrl="/login?tab=register"
+              appearance={clerkAuthAppearance}
+              initialValues={prefillEmail ? { emailAddress: prefillEmail } : undefined}
+            />
+          )}
+        </div>
 
-        <p className="text-center text-sm text-[var(--muted)]">
+        <p className="text-center text-sm text-white/55">
           {isRegister ? (
             <>
               Already have an account?{' '}
-              <Link href="/login" className="font-semibold text-blue-800 hover:underline">
+              <Link href="/login" className="font-semibold text-[#93c5fd] hover:underline">
                 Sign in
               </Link>
             </>
@@ -181,7 +181,7 @@ function LoginPageContent() {
               Need an account?{' '}
               <Link
                 href="/login?tab=register"
-                className="font-semibold text-blue-800 hover:underline"
+                className="font-semibold text-[#93c5fd] hover:underline"
               >
                 Sign up
               </Link>
@@ -190,7 +190,7 @@ function LoginPageContent() {
         </p>
 
         <div className="text-center">
-          <Link href="/" className="text-xs font-medium text-[var(--muted)] transition hover:text-blue-800">
+          <Link href="/" className="text-xs font-medium text-white/40 transition hover:text-white/75">
             ← Back to PropIntel
           </Link>
         </div>
@@ -203,8 +203,8 @@ export default function LoginPage() {
   return (
     <React.Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-700" />
+        <div className="flex min-h-screen items-center justify-center bg-[#070b14]">
+          <Loader2 className="h-8 w-8 animate-spin text-[#93c5fd]" />
         </div>
       }
     >

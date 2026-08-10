@@ -812,3 +812,75 @@ html.dark .clerk-user-profile .cl-navbarButton[aria-current='page'] {
   box-shadow: var(--shadow-lift) !important;
 }
 
+/* ---------------------------------------------------------------------------
+ * Auth (SignIn / SignUp) — always light card, even when html.dark is set
+ * --------------------------------------------------------------------------- */
+.clerk-auth,
+.clerk-auth .cl-card,
+.clerk-auth .cl-cardBox,
+.clerk-auth .cl-main,
+.clerk-auth .cl-rootBox {
+  color: #0b1220 !important;
+}
+
+.clerk-auth .cl-socialButtonsBlockButton,
+.clerk-auth .cl-socialButtonsBlockButton__google,
+.clerk-auth button.cl-socialButtonsBlockButton {
+  background-color: #ffffff !important;
+  border: 1px solid rgba(11, 18, 32, 0.12) !important;
+  color: #0b1220 !important;
+  box-shadow: none !important;
+}
+
+.clerk-auth .cl-socialButtonsBlockButton:hover {
+  background-color: #f3f6fb !important;
+}
+
+.clerk-auth .cl-socialButtonsBlockButtonText,
+.clerk-auth .cl-socialButtonsBlockButton span,
+.clerk-auth .cl-socialButtonsProviderIcon__google + span {
+  color: #0b1220 !important;
+  opacity: 1 !important;
+}
+
+.clerk-auth .cl-formFieldInput,
+.clerk-auth input.cl-input,
+.clerk-auth .cl-input {
+  background-color: #f3f6fb !important;
+  color: #0b1220 !important;
+  border: 1px solid rgba(11, 18, 32, 0.14) !important;
+  caret-color: #0b1220 !important;
+}
+
+.clerk-auth .cl-formFieldInput::placeholder,
+.clerk-auth input.cl-input::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1 !important;
+}
+
+.clerk-auth .cl-formFieldLabel,
+.clerk-auth .cl-dividerText,
+.clerk-auth .cl-footerActionText {
+  color: #5b6578 !important;
+}
+
+.clerk-auth .cl-formButtonPrimary {
+  background-color: #1d4ed8 !important;
+  color: #ffffff !important;
+}
+
+.clerk-auth .cl-formButtonPrimary:hover {
+  background-color: #1639a8 !important;
+}
+
+.clerk-auth .cl-footerActionLink,
+.clerk-auth .cl-formButtonReset {
+  color: #1d4ed8 !important;
+}
+
+.clerk-auth .cl-internal-b3fm6y,
+.clerk-auth [data-localization-key='developmentMode'] {
+  /* Keep Clerk's development banner readable on light card */
+  color: #c2410c !important;
+}
+
