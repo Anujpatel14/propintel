@@ -237,14 +237,14 @@ export async function resolveAppUser(): Promise<
   const clerkAuth = await auth();
   if (!clerkAuth?.userId) return { status: 'anonymous' };
 
-  try {
+  const attemptSync = async () => {
     const user = await currentUser();
     const email =
       user?.primaryEmailAddress?.emailAddress ||
       user?.emailAddresses?.[0]?.emailAddress;
 
     if (!email) {
-      return { status: 'sync_error', clerkId: clerkAuth.userId };
+      return { status: 'missing_email' as const };
     }
 
     const name =
@@ -254,16 +254,43 @@ export async function resolveAppUser(): Promise<
 
     const session = await syncClerkUserToDb(clerkAuth.userId, email, name);
     if (session.status === 'SUSPENDED') {
-      return { status: 'suspended', user: session };
+      return { status: 'suspended' as const, user: session };
     }
     void maybeRecordLogin(session.id);
-    return { status: 'ready', user: session };
+    return { status: 'ready' as const, user: session };
+  };
+
+  try {
+    let result = await attemptSync();
+
+    // Right after OAuth/sign-up, email or DB write can lag once — retry briefly.
+    if (result.status === 'missing_email') {
+      await new Promise((r) => setTimeout(r, 400));
+      result = await attemptSync();
+    }
+
+    if (result.status === 'missing_email') {
+      return { status: 'sync_error', clerkId: clerkAuth.userId };
+    }
+
+    return result;
   } catch (err) {
     void logError('resolveAppUser failed', err, { category: 'AUTH' });
-    if (isDbConnectivityError(err)) {
-      return { status: 'db_unavailable', clerkId: clerkAuth.userId };
+    // One retry for transient Neon / connection blips after signup
+    try {
+      await new Promise((r) => setTimeout(r, 500));
+      const retry = await attemptSync();
+      if (retry.status === 'missing_email') {
+        return { status: 'sync_error', clerkId: clerkAuth.userId };
+      }
+      return retry;
+    } catch (retryErr) {
+      void logError('resolveAppUser retry failed', retryErr, { category: 'AUTH' });
+      if (isDbConnectivityError(err) || isDbConnectivityError(retryErr)) {
+        return { status: 'db_unavailable', clerkId: clerkAuth.userId };
+      }
+      return { status: 'sync_error', clerkId: clerkAuth.userId };
     }
-    return { status: 'sync_error', clerkId: clerkAuth.userId };
   }
 }
 

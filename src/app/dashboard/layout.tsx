@@ -5,6 +5,7 @@ import { resolveAppUser } from '@/lib/services/auth';
 import { getUserSubscription } from '@/lib/services/stripe';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 import DatabaseUnavailable from '@/components/DatabaseUnavailable';
+import AuthSyncError from '@/components/AuthSyncError';
 
 export const metadata: Metadata = {
   title: 'Overview',
@@ -26,8 +27,8 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   }
 
   if (resolved.status === 'sync_error') {
-    // Break login↔dashboard loop: force a clean sign-in
-    redirect('/login?error=session');
+    // Keep the Clerk session — signing out here dumped new signups back on /login.
+    return <AuthSyncError clerkId={resolved.clerkId} />;
   }
 
   if (resolved.status === 'suspended') {

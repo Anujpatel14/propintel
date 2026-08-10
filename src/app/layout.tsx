@@ -80,6 +80,8 @@ export default function RootLayout({
           signUpUrl="/login?tab=register"
           signInFallbackRedirectUrl="/dashboard"
           signUpFallbackRedirectUrl="/dashboard"
+          signInForceRedirectUrl="/dashboard"
+          signUpForceRedirectUrl="/dashboard"
           appearance={clerkAppearance}
         >
           <Providers>{children}</Providers>

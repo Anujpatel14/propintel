@@ -2,14 +2,17 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { SignIn, SignUp, useAuth, useClerk } from '@clerk/nextjs';
 import { Loader2 } from 'lucide-react';
 import { BrandLogo } from '@/components/BrandLogo';
 import { usePageTitle } from '@/components/DocumentTitle';
 import { clerkAuthAppearance } from '@/lib/clerkAppearance';
 
+const SUSPENDED_FLAG = 'pi_show_suspended';
+
 function LoginPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { isLoaded, isSignedIn } = useAuth();
   const { signOut } = useClerk();
@@ -20,9 +23,12 @@ function LoginPageContent() {
   const resetRequested = searchParams.get('reset') === '1';
   const prefillEmail = searchParams.get('email') || '';
   const isRegister = tabParam === 'register';
-  const [clearing, setClearing] = useState(sessionError || suspendedError);
-  const [clearFailed, setClearFailed] = useState(false);
-  const clearedRef = useRef(false);
+
+  const [showSuspended, setShowSuspended] = useState(false);
+  const [clearingSuspended, setClearingSuspended] = useState(false);
+  const suspendedHandled = useRef(false);
+  const sessionHandled = useRef(false);
+  const forwardHandled = useRef(false);
 
   usePageTitle(isRegister ? 'Sign up' : resetRequested ? 'Reset password' : 'Sign in');
 
@@ -37,56 +43,79 @@ function LoginPageContent() {
     afterAuthUrl === '/ops' ||
     afterAuthUrl.includes('pintel-4dmin-p4n3l-9f2a');
 
-  // Break redirect loop: Clerk cookie present but app user sync failed / suspended.
+  // Restore suspended banner without keeping ?error=suspended in the URL (avoids remount loops).
   useEffect(() => {
-    if (!isLoaded || (!sessionError && !suspendedError) || clearedRef.current) return;
-    clearedRef.current = true;
-    setClearing(true);
-    setClearFailed(false);
-
-    let finished = false;
-    const finish = (failed = false) => {
-      if (finished) return;
-      finished = true;
-      window.clearTimeout(timeoutId);
-      if (failed) {
-        setClearing(false);
-        setClearFailed(true);
-        return;
+    try {
+      if (sessionStorage.getItem(SUSPENDED_FLAG) === '1') {
+        setShowSuspended(true);
+        sessionStorage.removeItem(SUSPENDED_FLAG);
       }
-      window.location.replace(suspendedError ? '/login?error=suspended' : '/login');
-    };
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
-    const timeoutId = window.setTimeout(() => finish(true), 6000);
+  /**
+   * Legacy ?error=session loop breaker:
+   * Old builds sent sync failures here and signed the user out forever.
+   * Always leave this URL — send signed-in users to the dashboard, otherwise clean /login.
+   */
+  useEffect(() => {
+    if (!isLoaded || !sessionError || sessionHandled.current) return;
+    sessionHandled.current = true;
+    if (isSignedIn) {
+      window.location.replace(afterAuthUrl);
+      return;
+    }
+    router.replace(isRegister ? '/login?tab=register' : '/login');
+  }, [isLoaded, sessionError, isSignedIn, afterAuthUrl, router, isRegister]);
+
+  /**
+   * Suspended: sign out once, then land on clean /login with a one-shot banner.
+   * Never redirect back to ?error=suspended (that remounts and loops).
+   */
+  useEffect(() => {
+    if (!isLoaded || !suspendedError || suspendedHandled.current) return;
+    suspendedHandled.current = true;
+    setClearingSuspended(true);
 
     void (async () => {
       try {
-        await signOut({
-          redirectUrl: suspendedError ? '/login?error=suspended' : '/login',
-        });
-        finish(false);
+        try {
+          sessionStorage.setItem(SUSPENDED_FLAG, '1');
+        } catch {
+          /* ignore */
+        }
+        await signOut({ redirectUrl: '/login' });
       } catch {
-        finish(false);
+        /* fall through */
       }
+      window.location.replace('/login');
     })();
+  }, [isLoaded, suspendedError, signOut]);
 
-    return () => window.clearTimeout(timeoutId);
-  }, [isLoaded, sessionError, suspendedError, signOut]);
-
-  // Only auto-forward when signed in AND not recovering from a sync/suspend error.
+  // Signed-in users on a clean login page → investor panel (skip while clearing suspended).
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || sessionError || suspendedError || clearing) return;
+    if (!isLoaded || !isSignedIn || suspendedError || clearingSuspended || sessionError) return;
+    if (forwardHandled.current) return;
+    forwardHandled.current = true;
     window.location.replace(afterAuthUrl);
-  }, [isLoaded, isSignedIn, sessionError, suspendedError, clearing, afterAuthUrl]);
+  }, [isLoaded, isSignedIn, suspendedError, clearingSuspended, sessionError, afterAuthUrl]);
 
-  if (!isLoaded || clearing || (isSignedIn && !sessionError && !suspendedError && !clearFailed)) {
+  if (!isLoaded || clearingSuspended || sessionError || (isSignedIn && !showSuspended)) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#070b14] px-5 text-sm text-white/55">
         <Loader2 className="h-8 w-8 animate-spin text-[#93c5fd]" />
-        {clearing ? 'Refreshing your session…' : isSignedIn ? 'Taking you to your workspace…' : 'Loading…'}
-        {clearing ? (
+        {clearingSuspended
+          ? 'Signing out…'
+          : sessionError
+            ? 'Recovering your session…'
+            : isSignedIn
+              ? 'Opening your investor workspace…'
+              : 'Loading…'}
+        {sessionError ? (
           <p className="max-w-xs text-center text-xs text-white/40">
-            This should only take a moment. If it hangs, your database may not be configured yet.
+            Breaking a stuck redirect — you should land in the dashboard next.
           </p>
         ) : null}
       </div>
@@ -114,25 +143,7 @@ function LoginPageContent() {
           </p>
         </div>
 
-        {clearFailed ? (
-          <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
-            Session refresh timed out. Check that{' '}
-            <code className="rounded bg-black/30 px-1">DATABASE_URL</code> is set, then sign in again.
-            <div className="mt-2">
-              <button
-                type="button"
-                className="font-semibold text-[#93c5fd] underline"
-                onClick={() => {
-                  window.location.replace('/login');
-                }}
-              >
-                Continue to sign in
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {suspendedError ? (
+        {showSuspended ? (
           <div className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-xs text-red-100">
             Your account has been suspended by an administrator. Contact support if you believe this
             is a mistake.
@@ -153,6 +164,8 @@ function LoginPageContent() {
               routing="hash"
               forceRedirectUrl={afterAuthUrl}
               fallbackRedirectUrl={afterAuthUrl}
+              signInForceRedirectUrl={afterAuthUrl}
+              signInFallbackRedirectUrl={afterAuthUrl}
               signInUrl="/login"
               appearance={clerkAuthAppearance}
             />
@@ -161,6 +174,8 @@ function LoginPageContent() {
               routing="hash"
               forceRedirectUrl={afterAuthUrl}
               fallbackRedirectUrl={afterAuthUrl}
+              signUpForceRedirectUrl={afterAuthUrl}
+              signUpFallbackRedirectUrl={afterAuthUrl}
               signUpUrl="/login?tab=register"
               appearance={clerkAuthAppearance}
               initialValues={prefillEmail ? { emailAddress: prefillEmail } : undefined}
