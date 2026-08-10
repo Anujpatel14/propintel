@@ -147,8 +147,8 @@ export default function DealDetailPage() {
           ? [
               ['Purchase', money(a.purchasePrice)],
               ['Rehab', money(a.rehabCost)],
-              ['ARV', money(a.arv)],
-              ['Profit', money(a.profit)],
+              ['ARV', money('arv' in a ? a.arv : null)],
+              ['Profit', money('profit' in a ? a.profit : null)],
             ]
           : [
               ['Purchase', money(a.purchasePrice)],

@@ -381,9 +381,9 @@ export async function updateAdminCoachingSession(
 
   let coachName = data.coachName;
   if (data.expertId) {
-    const expert = await withDbRetry(() =>
+    const expert = (await withDbRetry(() =>
       requireCoachingExpertDelegate().findUnique({ where: { id: data.expertId! } } as never)
-    );
+    )) as { name: string } | null;
     if (expert) coachName = expert.name;
   }
 

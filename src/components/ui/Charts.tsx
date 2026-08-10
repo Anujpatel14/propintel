@@ -277,7 +277,6 @@ export function BarChart({ data, height = 180 }: BarChartProps) {
                 fill="var(--muted-foreground)"
                 fontSize="10"
                 fontWeight="600"
-                fill="var(--muted-foreground)"
               >
                 {d.label}
               </text>
