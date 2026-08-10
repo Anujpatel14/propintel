@@ -29,7 +29,7 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
-const themeInitScript = `(function(){try{var t=localStorage.getItem('propintel-theme');var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d){document.documentElement.classList.add('dark');document.documentElement.dataset.theme='dark';document.documentElement.style.colorScheme='dark';}else{document.documentElement.dataset.theme='light';document.documentElement.style.colorScheme='light';}}catch(e){}})();`;
+const themeInitScript = `(function(){try{var t=localStorage.getItem('propintel-theme');var d=t==='dark';if(d){document.documentElement.classList.add('dark');document.documentElement.dataset.theme='dark';document.documentElement.style.colorScheme='dark';}else{document.documentElement.classList.remove('dark');document.documentElement.dataset.theme='light';document.documentElement.style.colorScheme='light';}}catch(e){document.documentElement.classList.remove('dark');document.documentElement.dataset.theme='light';document.documentElement.style.colorScheme='light';}})();`;
 
 export const metadata: Metadata = {
   title: {
